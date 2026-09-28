@@ -38,6 +38,8 @@ pub enum CompletionContext {
 /// - `FROM users u` followed by `u.` resolves to
 ///   `ColumnExpected { table: "users" }` because we extract a
 ///   forward-walking alias map before the reverse classification pass.
+///   The alias map covers the whole statement, so `SELECT u.` followed
+///   later by `FROM users u` resolves the same way.
 /// - `public.` (where `public` is *not* a known alias) resolves to
 ///   `SchemaTableExpected { schema: "public" }` so the gather step
 ///   can narrow the table list.
@@ -53,13 +55,18 @@ pub fn detect_context_with_schemas(
     cursor_byte_offset: usize,
     known_schemas: &[String],
 ) -> CompletionContext {
-    let slice = trim_to_current_statement(buffer, cursor_byte_offset);
-    let tokens = tokenize(&slice);
+    let (before_cursor, after_cursor) = current_statement(buffer, cursor_byte_offset);
+    let tokens = tokenize(before_cursor);
 
     // Build a forward-walking alias map: `FROM users u` and
     // `JOIN orders AS o` both contribute `(u, users)` / `(o, orders)`.
-    // We need it before the reverse pass so `u.` can resolve to `users`.
-    let alias_map = extract_aliases(&tokens);
+    // Aliases before the cursor win; text after it only fills gaps, so
+    // `SELECT u.| FROM users u` resolves without a later subquery's
+    // `u` overriding an earlier one.
+    let mut alias_map = extract_aliases(&tokens);
+    for (alias, table) in extract_aliases(&tokenize(after_cursor)) {
+        alias_map.entry(alias).or_insert(table);
+    }
 
     // Walk tokens in reverse so the *closest* keyword to the cursor
     // wins (handles nested clauses like `SELECT ... FROM (SELECT ...`).
@@ -185,15 +192,16 @@ fn consume_alias(
     }
 }
 
-/// Trim `buffer` to only the portion of the current statement —
-/// everything after the last `;` that appears before `cursor_byte_offset`.
-fn trim_to_current_statement(buffer: &str, cursor_byte_offset: usize) -> String {
-    let end = cursor_byte_offset.min(buffer.len());
-    let prefix = &buffer[..end];
-    // Find the last `;` before the cursor.
-    if let Some(pos) = prefix.rfind(';') {
-        prefix[pos + ';'.len_utf8()..].to_owned()
-    } else {
-        prefix.to_owned()
-    }
+/// Slice out the statement containing `cursor_byte_offset`, bounded by
+/// the nearest `;` on each side, and split it at the cursor into
+/// `(before_cursor, after_cursor)`.
+fn current_statement(buffer: &str, cursor_byte_offset: usize) -> (&str, &str) {
+    let cursor = cursor_byte_offset.min(buffer.len());
+    let start = buffer[..cursor]
+        .rfind(';')
+        .map_or(0, |pos| pos + ';'.len_utf8());
+    let end = buffer[cursor..]
+        .find(';')
+        .map_or(buffer.len(), |pos| cursor + pos);
+    (&buffer[start..cursor], &buffer[cursor..end])
 }

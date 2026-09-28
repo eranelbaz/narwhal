@@ -281,6 +281,38 @@ mod tests {
         );
     }
 
+    /// `SELECT u.| FROM users u` — alias declared after the cursor in
+    /// the same statement still resolves; aliases from other statements
+    /// do not leak in.
+    #[test]
+    fn alias_declared_after_cursor_resolves() {
+        let buf = "SELECT u. FROM users u; SELECT * FROM orders x";
+        let cursor = "SELECT u.".len();
+        let ctx = detect_context(buf, cursor);
+        assert_eq!(
+            ctx,
+            CompletionContext::ColumnExpected {
+                table: "users".into()
+            }
+        );
+        let out = gather("e", &listing(), &ctx, &user_cols(), 50);
+        assert!(out.iter().any(|c| c.text == "email"));
+
+        let buf = "SELECT x. FROM users u; SELECT * FROM orders x";
+        let ctx = detect_context(buf, "SELECT x.".len());
+        assert_eq!(ctx, CompletionContext::ColumnExpected { table: "x".into() });
+
+        let before = "SELECT * FROM users u WHERE u.";
+        let buf = format!("{before} IN (SELECT id FROM orders u)");
+        let ctx = detect_context(&buf, before.len());
+        assert_eq!(
+            ctx,
+            CompletionContext::ColumnExpected {
+                table: "users".into()
+            }
+        );
+    }
+
     /// `JOIN orders AS o ON o.` walks through the explicit `AS` form.
     #[test]
     fn alias_with_explicit_as_keyword_is_resolved() {

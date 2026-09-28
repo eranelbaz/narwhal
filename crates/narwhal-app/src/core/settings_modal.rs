@@ -108,6 +108,11 @@ impl AppCore {
     /// `last_self_settings_write` timestamp so the live-reload
     /// watcher can suppress the echo of our own write.
     async fn persist_settings(&mut self, settings: &Settings) -> Result<(), String> {
+        // Test cores never get a connections path; keep them off the
+        // user's real config.toml.
+        if self.session.connections_path.is_none() {
+            return Ok(());
+        }
         let paths =
             narwhal_config::ConfigPaths::discover().map_err(|e| format!("config paths: {e}"))?;
         settings

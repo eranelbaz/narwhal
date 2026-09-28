@@ -25,6 +25,12 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
+        self.ensure_columns_cached(&context).await;
+        let schemas = self
+            .session
+            .active
+            .as_ref()
+            .map_or(&[][..], |s| s.schemas.as_slice());
         let columns = self.column_cache().await;
         let items = gather_completions(&prefix, schemas, &context, &columns, 50);
         if items.is_empty() {

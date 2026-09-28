@@ -302,6 +302,15 @@ mod tests {
         let ctx = detect_context(buf, "SELECT x.".len());
         assert_eq!(ctx, CompletionContext::ColumnExpected { table: "x".into() });
 
+        let buf = "select u.em from users u";
+        let ctx = detect_context(buf, "select u.em".len());
+        assert_eq!(
+            ctx,
+            CompletionContext::ColumnExpected {
+                table: "users".into()
+            }
+        );
+
         let before = "SELECT * FROM users u WHERE u.";
         let buf = format!("{before} IN (SELECT id FROM orders u)");
         let ctx = detect_context(&buf, before.len());

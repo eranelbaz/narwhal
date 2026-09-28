@@ -300,6 +300,8 @@ impl AppCore {
                 }
                 if let Some(session) = self.session.active.as_mut() {
                     session.schemas = schemas;
+                    session.column_cache.clear();
+                    session.table_schema_cache.clear();
                 }
                 self.rebuild_sidebar();
                 let table_count = self.count_sidebar_tables();

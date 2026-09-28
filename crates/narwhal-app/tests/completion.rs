@@ -143,6 +143,25 @@ async fn esc_dismisses_popup_without_inserting() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn alias_columns_complete_without_opening_table_from_sidebar() {
+    let mut core = open_with_tables(&["accounts"]).await;
+    core.handle_key(key(KeyCode::Char('i'))).await;
+    core.editor_paste("select acc. from accounts acc").await;
+    core.tabs_mut()[0]
+        .editor_mut()
+        .set_cursor(0, "select acc.".len());
+    type_str(&mut core, "la").await;
+    assert!(
+        core.editor_completion_is_open().await,
+        "buffer: {:?}",
+        core.editor().entire_text()
+    );
+    core.handle_key(key(KeyCode::Tab)).await;
+    let text = core.editor().entire_text();
+    assert_eq!(text, "select acc.label from accounts acc");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn empty_prefix_inserts_four_spaces() {
     let mut core = open_with_tables(&["orders"]).await;
     core.handle_key(key(KeyCode::Char('i'))).await;

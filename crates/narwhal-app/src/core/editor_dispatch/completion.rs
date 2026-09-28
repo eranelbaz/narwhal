@@ -25,7 +25,7 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
-        self.ensure_columns_cached(&context).await;
+        self.ensure_columns_cached(&context);
         let schemas = self
             .session
             .active

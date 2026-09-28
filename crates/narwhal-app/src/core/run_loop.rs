@@ -301,6 +301,7 @@ impl AppCore {
                 if let Some(session) = self.session.active.as_mut() {
                     session.schemas = schemas;
                     session.column_cache.clear();
+                    session.columns_in_flight.clear();
                     session.table_schema_cache.clear();
                 }
                 self.rebuild_sidebar();
@@ -428,6 +429,31 @@ impl AppCore {
                 }
                 self.ui.status.message = format!("injected DDL for {schema}.{name}");
             }
+            MetaUpdate::ColumnsFetched {
+                session_id,
+                table,
+                schema,
+                result,
+            } => {
+                let Some(session) = self
+                    .session
+                    .active
+                    .as_mut()
+                    .filter(|s| s.config.id == session_id)
+                else {
+                    return;
+                };
+                session.columns_in_flight.remove(&table);
+                match result {
+                    Ok(columns) => {
+                        session.column_cache.insert(table, (schema, columns));
+                        self.ui.completion_refresh_pending = true;
+                    }
+                    Err(message) => {
+                        self.ui.status.message = format!("columns for {table}: {message}");
+                    }
+                }
+            }
             MetaUpdate::TestCompleted { label, result } => {
                 // Sprint 9 (H7): `:test <name|url>` outcome from the
                 // meta worker. The status bar is the only side-effect
@@ -509,6 +535,23 @@ impl AppCore {
     pub async fn drain_ready_meta_updates(&mut self) {
         while let Ok(update) = self.meta_rx.try_recv() {
             self.handle_meta_update(update);
+        }
+        self.apply_completion_refresh().await;
+    }
+
+    /// Re-run auto-complete once background column metadata has landed,
+    /// if the user is still typing in the editor.
+    pub async fn apply_completion_refresh(&mut self) {
+        if !std::mem::take(&mut self.ui.completion_refresh_pending) {
+            return;
+        }
+        let typing = self.ui.focus == Pane::Editor
+            && match self.ui.editor_mode {
+                narwhal_config::EditorMode::Vim => self.ui.vim.mode() == narwhal_vim::Mode::Insert,
+                _ => true,
+            };
+        if typing && !self.modals.any_open_except_context_menu() {
+            self.maybe_auto_complete().await;
         }
     }
 

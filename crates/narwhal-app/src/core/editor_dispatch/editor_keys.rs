@@ -10,8 +10,7 @@ use crate::completion::{
     CompletionContext, detect_context_with_schemas, gather as gather_completions,
 };
 use crate::core::{AppCore, CompletionState};
-
-const COLUMN_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+use crate::meta::MetaUpdate;
 
 /// Convert a `narwhal_vim::Motion` to `narwhal_domain::Motion`.
 ///
@@ -220,19 +219,18 @@ impl AppCore {
         map
     }
 
-    /// Describe `context`'s table on first use so column completion works
-    /// without the user having opened it from the sidebar. Bounded by
-    /// [`COLUMN_FETCH_TIMEOUT`] because it runs on a keystroke; failures
-    /// cache an empty list (cleared by `:refresh`) so a busy pool or broken
-    /// table doesn't stall every keystroke.
-    pub(crate) async fn ensure_columns_cached(&mut self, context: &CompletionContext) {
+    /// Describe `context`'s table in the background on first use so
+    /// column completion works without opening it from the sidebar. The
+    /// reply ([`MetaUpdate::ColumnsFetched`]) fills the cache and
+    /// refreshes the popup, so a slow remote describe never blocks typing.
+    pub(crate) fn ensure_columns_cached(&mut self, context: &CompletionContext) {
         let CompletionContext::ColumnExpected { table } = context else {
             return;
         };
         let Some(session) = self.session.active.as_mut() else {
             return;
         };
-        if session.column_cache.contains_key(table) {
+        if session.column_cache.contains_key(table) || session.columns_in_flight.contains(table) {
             return;
         }
         let Some((schema, real_name)) = session.schemas.iter().find_map(|(schema, tables)| {
@@ -243,26 +241,37 @@ impl AppCore {
         }) else {
             return;
         };
-        let columns = tokio::time::timeout(
-            COLUMN_FETCH_TIMEOUT,
-            session.describe_table_cached(&schema, &real_name),
-        )
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .map(|ts| {
-            ts.columns
-                .into_iter()
-                .map(|c| ColumnHeader {
-                    name: c.name,
-                    data_type: c.data_type,
+        session.columns_in_flight.insert(table.clone());
+        let pool = session.pool.clone();
+        let session_id = session.config.id;
+        let table = table.clone();
+        let meta_tx = self.process.meta_tx.clone();
+        tokio::spawn(async move {
+            let result = async {
+                let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
+                conn.describe_table(&schema, &real_name)
+                    .await
+                    .map_err(|e| e.to_string())
+            }
+            .await
+            .map(|ts| {
+                ts.columns
+                    .into_iter()
+                    .map(|c| ColumnHeader {
+                        name: c.name,
+                        data_type: c.data_type,
+                    })
+                    .collect()
+            });
+            let _ = meta_tx
+                .send(MetaUpdate::ColumnsFetched {
+                    session_id,
+                    table,
+                    schema,
+                    result,
                 })
-                .collect()
-        })
-        .unwrap_or_default();
-        session
-            .column_cache
-            .insert(table.clone(), (schema, columns));
+                .await;
+        });
     }
 
     /// Refresh-or-close the completion popup based on the current word
@@ -287,7 +296,7 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
-        self.ensure_columns_cached(&context).await;
+        self.ensure_columns_cached(&context);
         let schemas = self
             .session
             .active

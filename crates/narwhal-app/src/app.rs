@@ -280,6 +280,7 @@ impl App {
                 }
                 Some(meta) = self.core.meta_rx.recv() => {
                     self.core.handle_meta_update(meta);
+                    self.core.apply_completion_refresh().await;
                     Some(DrawTrigger::Force)
                 }
                 Some(_) = async {

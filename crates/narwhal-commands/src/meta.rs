@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use narwhal_config::{DynCredentialStore, VaultRegistry};
-use narwhal_core::{ConnectionConfig, DynDatabaseDriver, TableSchema};
+use narwhal_core::{ColumnHeader, ConnectionConfig, DynDatabaseDriver, TableSchema};
 use narwhal_domain::SchemaListing;
 use narwhal_history::HistoryEntry;
 use secrecy::{ExposeSecret, SecretString};
@@ -226,6 +226,19 @@ pub enum MetaUpdate {
         /// Rendered DDL text. The driver decides the dialect; the
         /// UI does not re-render.
         ddl: String,
+    },
+
+    /// Background `describe_table` for editor column completion. The
+    /// handler drops it if the active session no longer matches.
+    ColumnsFetched {
+        /// `ConnectionConfig.id` of the session that asked.
+        session_id: Uuid,
+        /// Lowercased table key into `Session::column_cache`.
+        table: String,
+        /// Owning schema, shown as the completion detail.
+        schema: String,
+        /// Columns on success, error text otherwise.
+        result: Result<Vec<ColumnHeader>, String>,
     },
 }
 

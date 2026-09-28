@@ -145,6 +145,9 @@ pub struct UiState {
     /// Pending `C-x` (emacs) prefix — next chord completes the
     /// binding. Cleared after one keystroke either way.
     pub emacs_pending_prefix: Option<char>,
+    /// Set when background column metadata lands so the host re-runs
+    /// auto-complete against the new cache.
+    pub completion_refresh_pending: bool,
     /// In-flight mouse drag inside the editor pane. `Some` between
     /// a `Down(Left)` and the matching `Up(Left)` (or focus loss).
     pub mouse_drag: Option<MouseDragState>,
@@ -186,6 +189,7 @@ impl UiState {
             mouse_mode: MouseSelectionMode::default(),
             show_mode_indicator: true,
             emacs_pending_prefix: None,
+            completion_refresh_pending: false,
             mouse_drag: None,
             last_click: None,
             context_menu: None,

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use narwhal_core::{
@@ -42,6 +42,9 @@ pub struct Session {
     /// values are `(schema_name, columns)` tuples. Populated when
     /// `describe_table` is called (e.g. from sidebar preview).
     pub column_cache: HashMap<String, (String, Vec<ColumnHeader>)>,
+    /// Table keys with a completion-driven describe in flight, so
+    /// repeated keystrokes don't spawn duplicate fetches.
+    pub columns_in_flight: HashSet<String>,
     /// m-2: full-fat [`TableSchema`] cache. Keys are `(schema,
     /// table)`; values are the entire driver introspection result
     /// (columns + indexes + foreign keys + unique constraints +
@@ -194,6 +197,7 @@ impl Session {
             schemas: Vec::new(),
             transaction: None,
             column_cache: HashMap::new(),
+            columns_in_flight: HashSet::new(),
             table_schema_cache: HashMap::new(),
             schemas_version: 0,
             _ssh_tunnel: tunnel,

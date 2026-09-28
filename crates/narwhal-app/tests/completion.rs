@@ -151,6 +151,8 @@ async fn alias_columns_complete_without_opening_table_from_sidebar() {
         .editor_mut()
         .set_cursor(0, "select acc.".len());
     type_str(&mut core, "la").await;
+    core.drain_meta_updates().await;
+    core.apply_completion_refresh().await;
     assert!(
         core.editor_completion_is_open().await,
         "buffer: {:?}",
@@ -159,6 +161,35 @@ async fn alias_columns_complete_without_opening_table_from_sidebar() {
     core.handle_key(key(KeyCode::Tab)).await;
     let text = core.editor().entire_text();
     assert_eq!(text, "select acc.label from accounts acc");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn alias_columns_basic_mode_popup_appears_when_columns_land() {
+    let mut core = open_with_tables(&["accounts"]).await;
+    core.execute_command("mode basic").await;
+    core.editor_paste("select ac. from accounts ac").await;
+    core.tabs_mut()[0]
+        .editor_mut()
+        .set_cursor(0, "select ac.".len());
+    type_str(&mut core, "la").await;
+    core.drain_meta_updates().await;
+    core.apply_completion_refresh().await;
+    assert!(core.editor_completion_is_open().await);
+    core.handle_key(key(KeyCode::Tab)).await;
+    assert_eq!(
+        core.editor().entire_text(),
+        "select ac.label from accounts ac"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn arrows_move_cursor_in_vim_insert_mode() {
+    let mut core = open_with_tables(&["accounts"]).await;
+    core.handle_key(key(KeyCode::Char('i'))).await;
+    type_str(&mut core, "ab").await;
+    core.handle_key(key(KeyCode::Left)).await;
+    type_str(&mut core, "X").await;
+    assert_eq!(core.editor().entire_text(), "aXb");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

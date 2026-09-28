@@ -16,7 +16,8 @@ pub fn gather(
     columns: &HashMap<String, (String, Vec<ColumnHeader>)>,
     limit: usize,
 ) -> Vec<Completion> {
-    if prefix.is_empty() {
+    // `ident.` alone lists every column; elsewhere completion stays opt-in.
+    if prefix.is_empty() && !matches!(context, CompletionContext::ColumnExpected { .. }) {
         return Vec::new();
     }
     let lower_prefix = prefix.to_ascii_lowercase();

@@ -189,8 +189,9 @@ mod tests {
         );
 
         let out = gather("", &listing(), &ctx, &cols, 50);
-        // Empty prefix yields nothing — completion is opt-in.
-        assert!(out.is_empty());
+        // Right after `users.` every column is offered.
+        assert_eq!(out.len(), cols["users"].1.len());
+        assert!(gather("", &listing(), &CompletionContext::Generic, &cols, 50).is_empty());
 
         // With a prefix we get the matching columns.
         let out = gather("n", &listing(), &ctx, &cols, 50);

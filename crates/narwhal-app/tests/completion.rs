@@ -183,6 +183,26 @@ async fn alias_columns_basic_mode_popup_appears_when_columns_land() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn dot_alone_lists_all_columns() {
+    let mut core = open_with_tables(&["account_settings"]).await;
+    core.handle_key(key(KeyCode::Char('i'))).await;
+    core.editor_paste("select ast from account_settings ast")
+        .await;
+    core.tabs_mut()[0]
+        .editor_mut()
+        .set_cursor(0, "select ast".len());
+    type_str(&mut core, ".").await;
+    core.drain_meta_updates().await;
+    core.apply_completion_refresh().await;
+    assert!(core.editor_completion_is_open().await);
+    core.handle_key(key(KeyCode::Tab)).await;
+    assert_eq!(
+        core.editor().entire_text(),
+        "select ast.id from account_settings ast"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn arrows_move_cursor_in_vim_insert_mode() {
     let mut core = open_with_tables(&["accounts"]).await;
     core.handle_key(key(KeyCode::Char('i'))).await;

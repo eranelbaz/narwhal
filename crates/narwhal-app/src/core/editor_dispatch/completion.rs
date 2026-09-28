@@ -2,6 +2,7 @@
 
 use crossterm::event::{KeyCode as CtKey, KeyEvent};
 
+use super::editor_keys::right_after_dot;
 use crate::completion::{detect_context_with_schemas, gather as gather_completions};
 use crate::core::text_utils::longest_common_prefix;
 use crate::core::{AppCore, CompletionState};
@@ -11,7 +12,10 @@ impl AppCore {
         let prefix = self.ui.tabs[self.ui.active_tab]
             .editor
             .current_word_prefix();
-        if prefix.is_empty() {
+        let editor = &self.ui.tabs[self.ui.active_tab].editor;
+        if prefix.is_empty()
+            && !right_after_dot(&editor.entire_text(), editor.cursor_byte_offset(), "")
+        {
             // Empty prefix: behave like a plain insert (4 spaces).
             self.ui.tabs[self.ui.active_tab].editor.insert_str("    ");
             return;

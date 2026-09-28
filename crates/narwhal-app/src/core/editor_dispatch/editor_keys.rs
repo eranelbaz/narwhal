@@ -12,6 +12,15 @@ use crate::completion::{
 use crate::core::{AppCore, CompletionState};
 use crate::meta::MetaUpdate;
 
+/// True when the word being completed starts immediately after a `.`
+/// (`ast.|` or `ast.i|`), i.e. a column reference rather than a
+/// dotted name the cursor has since moved past.
+pub(crate) fn right_after_dot(buffer: &str, cursor_offset: usize, prefix: &str) -> bool {
+    buffer
+        .get(..cursor_offset.saturating_sub(prefix.len()))
+        .is_some_and(|before| before.ends_with('.'))
+}
+
 /// Convert a `narwhal_vim::Motion` to `narwhal_domain::Motion`.
 ///
 /// The two enums are isomorphic but live in separate crates to avoid
@@ -283,10 +292,6 @@ impl AppCore {
         let prefix = self.ui.tabs[self.ui.active_tab]
             .editor
             .current_word_prefix();
-        if prefix.len() < 2 {
-            self.ui.tabs[self.ui.active_tab].completion = None;
-            return;
-        }
         let schemas = self
             .session
             .active
@@ -296,6 +301,16 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
+        // Columns open right after `ident.`; everything else waits for 2 chars.
+        let min_prefix = if right_after_dot(&buffer_text, offset, &prefix) {
+            0
+        } else {
+            2
+        };
+        if prefix.len() < min_prefix {
+            self.ui.tabs[self.ui.active_tab].completion = None;
+            return;
+        }
         self.ensure_columns_cached(&context);
         let schemas = self
             .session

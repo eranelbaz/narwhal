@@ -504,17 +504,11 @@ impl AppCore {
     }
 
     pub async fn handle_key(&mut self, key: KeyEvent) {
-        // H7 compat: when an `:open` is in flight we wait briefly for
-        // the background `SessionOpened` reply so a follow-up key sees
-        // the new session. In production this is a no-op once the
-        // user's typing rhythm exceeds the connect latency; on tests
-        // it lets `execute_command(":open ...")` + `handle_key` flow
-        // continue working without a manual
-        // `await_pending_session_opens` call. The wait runs through
-        // `block_in_place` so the multi-thread runtime keeps draining
-        // other workers in the meantime.
+        // `:open` already waited inline; if that timed out on a slow
+        // connect, apply any reply that has landed since without
+        // blocking this key (the event loop's `meta_rx` arm covers the rest).
         if !self.session.pending_session_opens.is_empty() {
-            self.await_pending_session_opens_sync().await;
+            self.drain_ready_meta_updates().await;
         }
         if self.modals.wizard.is_some() {
             self.handle_wizard_key(key).await;
@@ -1095,16 +1089,12 @@ impl AppCore {
     /// Execute a command exactly as if the user submitted it from command-line
     /// mode. Useful from tests.
     pub async fn execute_command(&mut self, raw: &str) {
-        // H7 compat: any command other than `:open` that follows an
-        // in-flight open should see the freshly-opened session. Mirror
-        // the same brief wait that `handle_key` does so callers can
-        // chain `execute_command(":open foo"); execute_command(":run")`
-        // without explicit drains.
+        // Same non-blocking catch-up as `handle_key`.
         let parsed = parse(raw);
         if !matches!(parsed, Command::Open(_) | Command::Quit | Command::Cancel)
             && !self.session.pending_session_opens.is_empty()
         {
-            self.await_pending_session_opens_sync().await;
+            self.drain_ready_meta_updates().await;
         }
         match parsed {
             Command::Quit => self.process.should_quit = true,

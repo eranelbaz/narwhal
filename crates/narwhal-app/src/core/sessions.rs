@@ -95,6 +95,7 @@ impl AppCore {
         // event loop's `select!` arm pick up `SessionOpened` from
         // `meta_rx`. The tests need to be migrated to an
         // `await_pending_session_opens` step first.
+        self.session.pending_session_opens.clear();
         self.session.pending_session_opens.insert(config_id);
         let dispatched = self
             .dispatch_meta(crate::meta::MetaRequest::OpenSession {
@@ -163,6 +164,10 @@ impl AppCore {
     }
 
     pub(super) async fn close_session(&mut self) {
+        if !self.session.pending_session_opens.is_empty() {
+            self.session.pending_session_opens.clear();
+            self.ui.status.message = "connect cancelled".into();
+        }
         if self.session.active.take().is_some() {
             // emit `ConnectionClosed` with the wall-clock
             // duration measured since `apply_opened_session`, then

@@ -319,6 +319,19 @@ impl AppCore {
                     return;
                 }
                 match result {
+                    Ok(session)
+                        if self.process.running
+                            || self
+                                .session
+                                .active
+                                .as_ref()
+                                .is_some_and(|s| s.transaction.is_some()) =>
+                    {
+                        self.ui.status.message = format!(
+                            "connected to {} but kept current session (query or transaction in progress); :open again to switch",
+                            session.config.name
+                        );
+                    }
                     Ok(session) => {
                         self.apply_opened_session(*session);
                     }
@@ -528,15 +541,12 @@ impl AppCore {
     /// usual run-channel flow.
     pub async fn await_pending_session_opens(&mut self) {
         while !self.session.pending_session_opens.is_empty() {
-            if let Ok(Some(update)) =
-                tokio::time::timeout(Duration::from_secs(5), self.meta_rx.recv()).await
-            {
-                self.handle_meta_update(update);
-            } else {
-                // Channel closed or timed out — clear the ledger so
-                // we don't spin forever.
-                self.session.pending_session_opens.clear();
-                break;
+            match tokio::time::timeout(Duration::from_secs(5), self.meta_rx.recv()).await {
+                Ok(Some(update)) => self.handle_meta_update(update),
+                // Slow connect: keep the ledger so the event loop's
+                // `meta_rx` arm applies the late `SessionOpened`.
+                Err(_) => break,
+                Ok(None) => break,
             }
         }
     }
@@ -713,5 +723,32 @@ impl AppCore {
             Some(n) => format!("ok {index}/{total} · {n} affected · {elapsed_ms} ms"),
             None => format!("ok {index}/{total} · {rows_returned} rows · {elapsed_ms} ms"),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DriverRegistry;
+    use narwhal_config::ConnectionsFile;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn slow_open_stays_pending_past_inline_wait() {
+        let mut core = AppCore::new(
+            DriverRegistry::with_defaults(),
+            ConnectionsFile::default(),
+            None,
+        );
+        let id = uuid::Uuid::new_v4();
+        core.session.pending_session_opens.insert(id);
+        core.await_pending_session_opens().await;
+        assert!(core.session.pending_session_opens.contains(&id));
+
+        core.handle_meta_update(MetaUpdate::SessionOpened {
+            config_id: id,
+            result: Err("boom".into()),
+        });
+        assert!(core.session.pending_session_opens.is_empty());
+        assert_eq!(core.ui.status.message, "connect failed: boom");
     }
 }

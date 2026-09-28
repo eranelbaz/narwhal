@@ -226,6 +226,30 @@ impl Vim {
             KeyCode::Backspace => Action::DeleteChar,
             KeyCode::Enter => Action::InsertText("\n".into()),
             KeyCode::Char(c) => Action::InsertText(c.to_string()),
+            KeyCode::Left => Action::Move {
+                motion: Motion::Left,
+                count: 1,
+            },
+            KeyCode::Right => Action::Move {
+                motion: Motion::Right,
+                count: 1,
+            },
+            KeyCode::Up => Action::Move {
+                motion: Motion::Up,
+                count: 1,
+            },
+            KeyCode::Down => Action::Move {
+                motion: Motion::Down,
+                count: 1,
+            },
+            KeyCode::Home => Action::Move {
+                motion: Motion::LineStart,
+                count: 1,
+            },
+            KeyCode::End => Action::Move {
+                motion: Motion::LineEnd,
+                count: 1,
+            },
             _ => Action::Pending,
         }
     }
@@ -566,6 +590,20 @@ mod tests {
                 count: 5,
             }
         );
+    }
+
+    #[test]
+    fn arrows_move_in_insert_mode() {
+        let mut vim = Vim::new();
+        vim.handle(Key::char('i'));
+        assert_eq!(
+            vim.handle(Key::special(KeyCode::Left)),
+            Action::Move {
+                motion: Motion::Left,
+                count: 1,
+            }
+        );
+        assert_eq!(vim.mode(), Mode::Insert);
     }
 
     #[test]

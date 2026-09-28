@@ -146,6 +146,20 @@ Full setup: [`docs/mcp.md`](./docs/mcp.md).
 | Building from source | [`docs/dev/build.md`](./docs/dev/build.md) |
 | Upgrading | [`docs/upgrading.md`](./docs/upgrading.md) |
 
+## Fork differences
+
+This fork tracks [Nonanti/narwhal](https://github.com/Nonanti/narwhal). As of
+this commit, it has these fixes/features not yet in upstream (0 commits behind):
+
+- `feat(completion)`: list every column right after `alias.`
+- `fix(completion)`: fetch dot-completion columns in the background
+- `fix(settings)`: don't write the real `config.toml` from test cores
+- `fix(vim)`: move the cursor with arrow keys in insert mode
+- `fix(session)`: apply slow connection opens instead of dropping them
+- `fix(completion)`: fetch columns on first use for dot completion
+- `fix(completion)`: resolve aliases declared after the cursor
+- `fix(clickhouse)`: send SQL in body for the connect-time ping request
+
 ## Contributing
 
 Issues and PRs welcome. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).

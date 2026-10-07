@@ -723,6 +723,7 @@ impl EditorBuffer {
         self.cursor_row = 0;
         self.cursor_col = 0;
         self.scroll = 0;
+        self.selection = None;
     }
 
     /// Insert a single character, applying auto-pair logic when enabled.
@@ -862,6 +863,70 @@ impl EditorBuffer {
         }
     }
 
+    /// Delete the character after the cursor, joining the next line
+    /// when the cursor sits at end of line (Delete key / vim `x`).
+    pub fn delete_char_forward(&mut self) {
+        if !self.secondary_cursors.is_empty() {
+            self.delete_next_char_multi();
+            return;
+        }
+        if self.cursor_col < self.current_line().len() {
+            self.delete_next_char();
+        } else if self.cursor_row + 1 < self.lines.len() {
+            let next = self.lines.remove(self.cursor_row + 1);
+            self.current_line_mut().push_str(&next);
+        }
+    }
+
+    /// Inclusive row span between the cursor and 1-based `line`
+    /// (the line-wise range of `d{line}gg`).
+    fn rows_to_line(&self, line: usize) -> (usize, usize) {
+        let target = line.saturating_sub(1).min(self.lines.len() - 1);
+        (self.cursor_row.min(target), self.cursor_row.max(target))
+    }
+
+    /// Byte offset `count` characters right of the cursor, clamped to EOL.
+    fn chars_forward_end(&self, count: usize) -> usize {
+        let line = self.current_line();
+        line[self.cursor_col..]
+            .char_indices()
+            .nth(count)
+            .map_or(line.len(), |(i, _)| self.cursor_col + i)
+    }
+
+    /// Forward delete at every cursor. Never joins lines, so rows stay
+    /// stable; cursors right of a deletion on the same row shift left.
+    fn delete_next_char_multi(&mut self) {
+        let primary = (self.cursor_row, self.cursor_col);
+        let mut cursors = self.secondary_cursors.clone();
+        cursors.push(primary);
+        cursors.sort_unstable();
+        cursors.dedup();
+        let (mut row_seen, mut removed) = (usize::MAX, 0);
+        let mut secondaries = Vec::with_capacity(cursors.len());
+        for (row, col) in cursors {
+            if row != row_seen {
+                (row_seen, removed) = (row, 0);
+            }
+            let Some(line) = self.lines.get_mut(row) else {
+                continue;
+            };
+            let new_col = floor_char_boundary(line, col.saturating_sub(removed));
+            if let Some(c) = line[new_col..].chars().next() {
+                line.replace_range(new_col..new_col + c.len_utf8(), "");
+                removed += c.len_utf8();
+            }
+            if (row, col) == primary {
+                self.cursor_col = new_col;
+            } else {
+                secondaries.push((row, new_col));
+            }
+        }
+        secondaries.dedup();
+        secondaries.retain(|&p| p != (self.cursor_row, self.cursor_col));
+        self.secondary_cursors = secondaries;
+    }
+
     pub fn delete_char(&mut self) {
         if !self.secondary_cursors.is_empty() {
             self.delete_prev_char_multi();
@@ -950,6 +1015,11 @@ impl EditorBuffer {
     }
 
     pub fn apply_motion(&mut self, motion: Motion, count: usize) {
+        // `FileStart` with a count jumps to that 1-based line (vim `5gg` / `5G`).
+        if motion == Motion::FileStart {
+            self.set_cursor(count.saturating_sub(1), 0);
+            return;
+        }
         for _ in 0..count {
             match motion {
                 Motion::Left => self.move_left(),
@@ -1041,8 +1111,8 @@ impl EditorBuffer {
                 self.lines[start_row..=end_row].join("\n")
             }
             Motion::FileStart => {
-                let end_row = self.cursor_row;
-                self.lines[0..=end_row].join("\n")
+                let (start, end) = self.rows_to_line(count);
+                self.lines[start..=end].join("\n")
             }
             Motion::FileEnd => {
                 let start_row = self.cursor_row;
@@ -1092,8 +1162,7 @@ impl EditorBuffer {
             }
             Motion::Right => {
                 let line = self.current_line();
-                let end_col = (self.cursor_col + count).min(line.len());
-                line[self.cursor_col..end_col].to_owned()
+                line[self.cursor_col..self.chars_forward_end(count)].to_owned()
             }
             Motion::LineStart => {
                 let line = self.current_line();
@@ -1145,12 +1214,12 @@ impl EditorBuffer {
                 self.clamp_cursor_col();
             }
             Motion::FileStart => {
-                let end_row = self.cursor_row;
-                self.lines.drain(0..=end_row);
+                let (start, end) = self.rows_to_line(count);
+                self.lines.drain(start..=end);
                 if self.lines.is_empty() {
                     self.lines.push(String::new());
                 }
-                self.cursor_row = 0;
+                self.cursor_row = start.min(self.lines.len() - 1);
                 self.cursor_col = 0;
             }
             Motion::FileEnd => {
@@ -1200,9 +1269,9 @@ impl EditorBuffer {
             }
             Motion::Right => {
                 let cursor_col = self.cursor_col;
-                let line = self.current_line_mut();
-                let end_col = (cursor_col + count).min(line.len());
-                line.replace_range(cursor_col..end_col, "");
+                let end_col = self.chars_forward_end(count);
+                self.current_line_mut()
+                    .replace_range(cursor_col..end_col, "");
                 // cursor stays at same col (text shifted left)
             }
             Motion::LineStart => {
@@ -1879,6 +1948,30 @@ mod tests {
         buf.add_secondary_cursor(0, 1);
         buf.insert_str("\nbar");
         assert!(!buf.has_multi_cursors());
+    }
+
+    #[test]
+    fn delete_to_line_spans_both_directions() {
+        let mut buf = EditorBuffer::new();
+        buf.insert_str("a\nb\nc\nd\ne");
+        buf.set_cursor(3, 0);
+        assert_eq!(buf.operator_range_text(Motion::FileStart, 2), "b\nc\nd");
+        buf.apply_operator_delete(Motion::FileStart, 2);
+        assert_eq!(buf.lines(), &["a".to_owned(), "e".to_owned()]);
+        buf.set_cursor(0, 0);
+        buf.apply_operator_delete(Motion::FileStart, 2);
+        assert_eq!(buf.lines(), &[String::new()]);
+    }
+
+    #[test]
+    fn delete_char_forward_multi_cursor() {
+        let mut buf = EditorBuffer::new();
+        buf.insert_str("abc\nxyz");
+        buf.set_cursor(0, 0);
+        buf.add_secondary_cursor(0, 2);
+        buf.add_secondary_cursor(1, 1);
+        buf.delete_char_forward();
+        assert_eq!(buf.lines(), &["b".to_owned(), "xz".to_owned()]);
     }
 
     #[test]

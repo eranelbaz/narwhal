@@ -31,15 +31,17 @@ expression: "snapshot_core_sized(&mut core, 130, 66)"
 │                            │  w / b                       word forward / backward                 │                            │
 │                            │  0 / $                       line start / end                        │                            │
 │                            │  v / V                       visual / visual-line mode               │                            │
+│                            │  d / y / c                   delete / yank / change selection (visual│                            │
+│                            │  x / Del                     delete char under cursor                │                            │
 │                            │                                                                      │                            │
 │                            │ Sidebar                                                              │                            │
 │                            │  j / k / ↑ / ↓               navigate                                │                            │
 │                            │  Enter                       describe table                          │                            │
-│                            │  o                           preview table data                      │                            │
-│                            │  d                           inject DDL into editor                  │                            │
-│                            │                                                                      │────────────────────────────┘
-│                            │ Results                                                              │────────────────────────────┐
-│                            │  h j k l / arrows            move selection                          │hole buffer, Ctrl-Space     │
+│                            │  o                           preview table data                      │────────────────────────────┘
+│                            │  d                           inject DDL into editor                  │────────────────────────────┐
+│                            │                                                                      │hole buffer, Ctrl-Space     │
+│                            │ Results                                                              │                            │
+│                            │  h j k l / arrows            move selection                          │                            │
 │                            │  Enter                       open cell popup                         │                            │
 │                            │  e                           edit cell value                         │                            │
 │                            │  y / Y                       yank cell / row to clipboard            │                            │
@@ -61,8 +63,6 @@ expression: "snapshot_core_sized(&mut core, 130, 66)"
 │                            │  :url <dsn>                  prefill the wizard from a connection URL│                            │
 │                            │  :test [name|url]            dry-run a connection without opening a s│                            │
 │                            │  :edit <name>                edit a saved connection in the wizard   │                            │
-│                            │  :open <name|url>            connect to a saved entry or an ad-hoc UR│                            │
-│                            │  :remove <name>              delete a saved connection (also :rm)    │                            │
 │                            └──────────────────────────────────────────────────────────────────────┘                            │
 │                                ││                                                                                              │
 │                                ││                                                                                              │

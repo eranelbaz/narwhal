@@ -10,6 +10,7 @@ pub const fn translate_key_event(event: KeyEvent) -> Option<Key> {
         CtKey::Enter => KeyCode::Enter,
         CtKey::Esc => KeyCode::Esc,
         CtKey::Backspace => KeyCode::Backspace,
+        CtKey::Delete => KeyCode::Delete,
         CtKey::Tab => KeyCode::Tab,
         CtKey::Up => KeyCode::Up,
         CtKey::Down => KeyCode::Down,

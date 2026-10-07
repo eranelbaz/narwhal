@@ -162,8 +162,7 @@ impl AppCore {
         if buf.has_selection() {
             let _ = buf.delete_selection();
         } else {
-            buf.apply_motion(DomainMotion::Right, 1);
-            buf.delete_char();
+            buf.delete_char_forward();
         }
         buf.commit_undo_snapshot(before);
     }

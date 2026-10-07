@@ -758,7 +758,10 @@ impl AppCore {
         self.ui.emacs_pending_prefix = None;
         // Cancel command-line prompt on middle-click (same rationale
         // as handle_left_click).
-        if self.ui.vim.mode() == narwhal_vim::Mode::Command {
+        if matches!(
+            self.ui.vim.mode(),
+            narwhal_vim::Mode::Command | narwhal_vim::Mode::Visual | narwhal_vim::Mode::VisualLine
+        ) {
             let esc = narwhal_vim::Key::special(narwhal_vim::KeyCode::Esc);
             let action = self.ui.vim.handle(esc);
             self.apply_action(action).await;
@@ -795,7 +798,10 @@ impl AppCore {
         self.ui.emacs_pending_prefix = None;
         // Cancel command-line prompt on right-click (same rationale
         // as handle_left_click).
-        if self.ui.vim.mode() == narwhal_vim::Mode::Command {
+        if matches!(
+            self.ui.vim.mode(),
+            narwhal_vim::Mode::Command | narwhal_vim::Mode::Visual | narwhal_vim::Mode::VisualLine
+        ) {
             let esc = narwhal_vim::Key::special(narwhal_vim::KeyCode::Esc);
             let action = self.ui.vim.handle(esc);
             self.apply_action(action).await;
@@ -875,7 +881,10 @@ impl AppCore {
         // strand key dispatch (the sidebar/results handlers don't
         // forward to the vim layer, so the prompt becomes
         // unreachable and Esc won't close it).
-        if self.ui.vim.mode() == narwhal_vim::Mode::Command {
+        if matches!(
+            self.ui.vim.mode(),
+            narwhal_vim::Mode::Command | narwhal_vim::Mode::Visual | narwhal_vim::Mode::VisualLine
+        ) {
             let esc = narwhal_vim::Key::special(narwhal_vim::KeyCode::Esc);
             let action = self.ui.vim.handle(esc);
             self.apply_action(action).await;

@@ -243,7 +243,7 @@ impl AppCore {
         // while in Command mode leaves keystrokes routing through the
         // dead vim handler.
         if prev_mode != self.ui.editor_mode {
-            self.ui.vim = narwhal_vim::Vim::new();
+            self.reset_vim();
         }
         self.ui.mouse_mode = settings.editor.mouse;
         self.ui.show_mode_indicator = settings.editor.show_mode_indicator;

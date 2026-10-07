@@ -3,6 +3,7 @@
 use crossterm::event::{KeyCode as CtKey, KeyEvent, KeyModifiers};
 use narwhal_core::ColumnHeader;
 use narwhal_domain::Motion as DomainMotion;
+use narwhal_domain::editor::Selection;
 use narwhal_tui::translate_key_event;
 use narwhal_vim::{Action, Mode, Motion as VimMotion, Operator};
 
@@ -343,6 +344,7 @@ impl AppCore {
                 self.ui.tabs[self.ui.active_tab]
                     .editor
                     .apply_motion(domain_motion(motion), count);
+                self.sync_visual_selection();
             }
             Action::InsertText(text) => {
                 // Note: warn the user when a
@@ -366,7 +368,29 @@ impl AppCore {
             Action::DeleteChar => {
                 self.ui.tabs[self.ui.active_tab].editor.delete_char();
             }
+            Action::DeleteCharForward => {
+                let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+                let before = buf.snapshot();
+                if buf.has_selection() {
+                    buf.delete_selection();
+                } else {
+                    buf.delete_char_forward();
+                }
+                buf.commit_undo_snapshot(before);
+            }
             Action::EnterMode(mode) => {
+                let buf = &self.ui.tabs[self.ui.active_tab].editor;
+                if matches!(mode, Mode::Visual | Mode::VisualLine) {
+                    self.ui.tabs[self.ui.active_tab].visual_anchor =
+                        Some((buf.cursor_row(), buf.cursor_col()));
+                    self.sync_visual_selection();
+                } else if self.ui.tabs[self.ui.active_tab]
+                    .visual_anchor
+                    .take()
+                    .is_some()
+                {
+                    self.ui.tabs[self.ui.active_tab].editor.clear_selection();
+                }
                 self.ui.status.message = match mode {
                     Mode::Insert => "-- INSERT --".into(),
                     Mode::Normal => "ready".into(),
@@ -397,12 +421,85 @@ impl AppCore {
             Action::OpenSearch(dir) => self.open_editor_search(dir).await,
             Action::RepeatSearch => self.repeat_editor_search(false).await,
             Action::RepeatSearchReverse => self.repeat_editor_search(true).await,
+            Action::Operate { op, .. }
+                if self.ui.tabs[self.ui.active_tab]
+                    .visual_anchor
+                    .take()
+                    .is_some() =>
+            {
+                self.apply_visual_operator(op);
+            }
             Action::Operate { op, motion, count } => {
                 self.apply_operator(op, motion, count).await;
             }
             // Future Action variants are silently ignored until wired.
             _ => {}
         }
+    }
+
+    /// Reset vim to Normal and drop every tab's visual selection.
+    pub(crate) fn reset_vim(&mut self) {
+        self.ui.vim = narwhal_vim::Vim::new();
+        for tab in &mut self.ui.tabs {
+            if tab.visual_anchor.take().is_some() {
+                tab.editor.clear_selection();
+            }
+        }
+    }
+
+    /// Rebuild the editor selection from the visual anchor to the
+    /// cursor. Vim visual ranges are inclusive, so the far end is
+    /// pushed past the character under it.
+    fn sync_visual_selection(&mut self) {
+        let Some(anchor) = self.ui.tabs[self.ui.active_tab].visual_anchor else {
+            return;
+        };
+        let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+        let cursor = (buf.cursor_row(), buf.cursor_col());
+        let sel = if self.ui.vim.mode() == Mode::VisualLine {
+            Selection::line(anchor, cursor)
+        } else {
+            let (start, (row, col)) = if anchor <= cursor {
+                (anchor, cursor)
+            } else {
+                (cursor, anchor)
+            };
+            let line = buf.lines().get(row).map_or("", String::as_str);
+            match line.get(col..).and_then(|rest| rest.chars().next()) {
+                Some(c) => Selection::character(start, (row, col + c.len_utf8())),
+                None if row + 1 < buf.lines().len() => Selection::character(start, (row + 1, 0)),
+                None => Selection::character(start, (row, col)),
+            }
+        };
+        buf.set_selection(Some(sel));
+    }
+
+    /// Apply a vim operator to the active visual selection.
+    fn apply_visual_operator(&mut self, op: Operator) {
+        let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+        let text = buf.selected_text();
+        if text.is_empty() {
+            buf.clear_selection();
+            return;
+        }
+        let chars = text.chars().count();
+        if op == Operator::Yank {
+            if let Some(sel) = buf.selection() {
+                let (start, _) = sel.normalised();
+                buf.set_cursor(start.0, start.1);
+            }
+            buf.clear_selection();
+        } else {
+            let before = buf.snapshot();
+            buf.delete_selection();
+            buf.commit_undo_snapshot(before);
+        }
+        self.ui.status.message = match self.deps.clipboard.set_text(&text) {
+            Err(e) => format!("clipboard error: {e}"),
+            Ok(()) if op == Operator::Yank => format!("yanked {chars} character(s)"),
+            Ok(()) if op == Operator::Delete => format!("deleted {chars} character(s)"),
+            Ok(()) => "-- INSERT --".into(),
+        };
     }
 
     /// Apply a vim operator (delete / yank / change) over the range
@@ -417,12 +514,30 @@ impl AppCore {
     async fn apply_operator(&mut self, op: Operator, motion: VimMotion, count: usize) {
         let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
         let dm = domain_motion(motion);
+        if buf.has_multi_cursors() && op == Operator::Delete && dm == DomainMotion::Right {
+            let _ = self
+                .deps
+                .clipboard
+                .set_text(&buf.operator_range_text(dm, count));
+            let before = buf.snapshot();
+            for _ in 0..count {
+                buf.delete_char_forward();
+            }
+            buf.commit_undo_snapshot(before);
+            return;
+        }
 
         // Compute the text range affected by the operator.
         let yanked = buf.operator_range_text(dm, count);
 
         // Yank: copy to clipboard, no deletion.
         if op == Operator::Yank {
+            if dm == DomainMotion::FileStart {
+                let target = count.saturating_sub(1);
+                if target < buf.cursor_row() {
+                    buf.set_cursor(target, 0);
+                }
+            }
             if let Err(e) = self.deps.clipboard.set_text(&yanked) {
                 self.ui.status.message = format!("clipboard error: {e}");
             } else {

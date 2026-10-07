@@ -42,6 +42,7 @@ pub enum KeyCode {
     Enter,
     Esc,
     Backspace,
+    Delete,
     Tab,
     Up,
     Down,

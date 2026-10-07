@@ -12,6 +12,8 @@ pub struct Vim {
     mode: Mode,
     pending_count: Option<usize>,
     command_buffer: String,
+    /// First `g` of an operator's `gg` motion has been typed.
+    op_pending_g: bool,
 }
 
 impl Vim {
@@ -72,11 +74,13 @@ impl Vim {
         // Ctrl-only chords we recognise. Esc-equivalents come first so
         // they behave consistently across modes.
         if key.mods == KeyMod::CTRL {
+            self.op_pending_g = false;
             if let KeyCode::Char(c) = key.code {
                 match c {
                     // Esc-equivalents: cancel pending op/count, return to Normal.
                     'c' | 'C' | '[' | 'g' | 'G' => {
                         self.pending_count = None;
+                        self.op_pending_g = false;
                         // Command-mode Ctrl-C should also drop the buffer.
                         if matches!(self.mode, Mode::Command) {
                             self.command_buffer.clear();
@@ -175,9 +179,21 @@ impl Vim {
                 self.mode = Mode::WaitingForSecondG;
                 Action::Pending
             }
-            KeyCode::Char('G') => Action::Move {
-                motion: Motion::FileEnd,
-                count: 1,
+            KeyCode::Char('G') => match self.pending_count.take() {
+                Some(line) => Action::Move {
+                    motion: Motion::FileStart,
+                    count: line,
+                },
+                None => Action::Move {
+                    motion: Motion::FileEnd,
+                    count: 1,
+                },
+            },
+            KeyCode::Delete => Action::DeleteCharForward,
+            KeyCode::Char('x') => Action::Operate {
+                op: Operator::Delete,
+                motion: Motion::Right,
+                count: self.take_count(),
             },
             KeyCode::Char('i' | 'a') => {
                 self.mode = Mode::Insert;
@@ -224,6 +240,7 @@ impl Vim {
                 Action::EnterMode(Mode::Normal)
             }
             KeyCode::Backspace => Action::DeleteChar,
+            KeyCode::Delete => Action::DeleteCharForward,
             KeyCode::Enter => Action::InsertText("\n".into()),
             KeyCode::Char(c) => Action::InsertText(c.to_string()),
             KeyCode::Left => Action::Move {
@@ -296,19 +313,19 @@ impl Vim {
                 self.push_count_digit(digit);
                 Action::Pending
             }
-            KeyCode::Char('h') => Action::Move {
+            KeyCode::Char('h') | KeyCode::Left => Action::Move {
                 motion: Motion::Left,
                 count: self.take_count(),
             },
-            KeyCode::Char('l') => Action::Move {
+            KeyCode::Char('l') | KeyCode::Right => Action::Move {
                 motion: Motion::Right,
                 count: self.take_count(),
             },
-            KeyCode::Char('j') => Action::Move {
+            KeyCode::Char('j') | KeyCode::Down => Action::Move {
                 motion: Motion::Down,
                 count: self.take_count(),
             },
-            KeyCode::Char('k') => Action::Move {
+            KeyCode::Char('k') | KeyCode::Up => Action::Move {
                 motion: Motion::Up,
                 count: self.take_count(),
             },
@@ -320,8 +337,29 @@ impl Vim {
                 motion: Motion::WordBackward,
                 count: self.take_count(),
             },
+            KeyCode::Char('0') | KeyCode::Home => {
+                self.pending_count = None;
+                Action::Move {
+                    motion: Motion::LineStart,
+                    count: 1,
+                }
+            }
+            KeyCode::Char('$') | KeyCode::End => Action::Move {
+                motion: Motion::LineEnd,
+                count: 1,
+            },
+            KeyCode::Char('G') => match self.pending_count.take() {
+                Some(line) => Action::Move {
+                    motion: Motion::FileStart,
+                    count: line,
+                },
+                None => Action::Move {
+                    motion: Motion::FileEnd,
+                    count: 1,
+                },
+            },
             // Operators in visual mode apply to the selection
-            KeyCode::Char('d' | 'x') => {
+            KeyCode::Char('d' | 'x') | KeyCode::Delete => {
                 let op = Operator::Delete;
                 self.mode = Mode::Normal;
                 Action::Operate {
@@ -379,6 +417,12 @@ impl Vim {
             _ => unreachable!("handle_operator_pending called outside OperatorPending"),
         };
 
+        let second_g = std::mem::take(&mut self.op_pending_g);
+        if second_g && !matches!(key.code, KeyCode::Char('g') | KeyCode::Esc) {
+            self.mode = Mode::Normal;
+            self.pending_count = None;
+            return Action::Pending;
+        }
         match key.code {
             // Digit accumulation continues into operator-pending
             KeyCode::Char(c @ '0'..='9') if !(c == '0' && self.pending_count.is_none()) => {
@@ -532,11 +576,22 @@ impl Vim {
                     Mode::Normal
                 };
                 self.mode = next_mode;
-                Action::Operate {
-                    op,
-                    motion: Motion::FileEnd,
-                    count: 1,
+                match self.pending_count.take() {
+                    Some(line) => Action::Operate {
+                        op,
+                        motion: Motion::FileStart,
+                        count: line,
+                    },
+                    None => Action::Operate {
+                        op,
+                        motion: Motion::FileEnd,
+                        count: 1,
+                    },
                 }
+            }
+            KeyCode::Char('g') if !second_g => {
+                self.op_pending_g = true;
+                Action::Pending
             }
             KeyCode::Char('g') => {
                 let count = self.take_count();
@@ -906,6 +961,40 @@ mod tests {
         // 'z' is not 'g' — should reset to Normal
         assert_eq!(vim.handle(Key::char('z')), Action::Pending);
         assert_eq!(vim.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn d_count_gg_waits_for_second_g() {
+        let mut vim = Vim::new();
+        vim.handle(Key::char('d'));
+        vim.handle(Key::char('5'));
+        assert_eq!(vim.handle(Key::char('g')), Action::Pending);
+        assert_eq!(
+            vim.handle(Key::char('g')),
+            Action::Operate {
+                op: Operator::Delete,
+                motion: Motion::FileStart,
+                count: 5,
+            }
+        );
+        assert_eq!(vim.mode(), Mode::Normal);
+        vim.handle(Key::char('d'));
+        vim.handle(Key::char('g'));
+        assert_eq!(vim.handle(Key::char('x')), Action::Pending);
+        assert_eq!(vim.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn count_g_goes_to_line() {
+        let mut vim = Vim::new();
+        vim.handle(Key::char('3'));
+        assert_eq!(
+            vim.handle(Key::char('G')),
+            Action::Move {
+                motion: Motion::FileStart,
+                count: 3,
+            }
+        );
     }
 
     #[test]

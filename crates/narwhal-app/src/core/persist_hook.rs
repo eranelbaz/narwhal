@@ -148,6 +148,7 @@ fn restore_tabs(core: &mut AppCore, snapshot: &PersistedWorkspace, restore_curso
     // Bump `next_tab_id` past the highest restored id so the next
     // `:new-tab` allocates a stable, non-colliding handle.
     core.ui.next_tab_id = next_id as usize;
+    core.reset_vim();
 }
 
 /// Reset `editor` to a clean state, push the persisted buffer back

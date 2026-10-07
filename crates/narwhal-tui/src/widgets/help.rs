@@ -128,6 +128,14 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 keys: "v / V",
                 description: "visual / visual-line mode",
             },
+            CheatsheetEntry {
+                keys: "d / y / c",
+                description: "delete / yank / change selection (visual)",
+            },
+            CheatsheetEntry {
+                keys: "x / Del",
+                description: "delete char under cursor",
+            },
         ],
     },
     CheatsheetSection {

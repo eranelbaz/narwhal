@@ -52,7 +52,7 @@ impl AppCore {
         // CB-11: vim is global — reset to Normal so transient modes
         // (Visual, Command, Insert, OperatorPending) don't leak into
         // the new tab.
-        self.ui.vim = narwhal_vim::Vim::new();
+        self.reset_vim();
     }
 
     pub(super) async fn close_tab(&mut self) {
@@ -71,7 +71,7 @@ impl AppCore {
         self.ui.status.message = format!("tab closed; now on {}", self.ui.active_tab + 1);
         // CB-11: reset vim so the closed tab's transient mode doesn't
         // bleed into the survivor.
-        self.ui.vim = narwhal_vim::Vim::new();
+        self.reset_vim();
     }
 
     pub(super) async fn cycle_tab(&mut self, delta: i32) {
@@ -93,7 +93,7 @@ impl AppCore {
         );
         // CB-11: vim is global — reset to Normal so Visual/Command/
         // Insert/OperatorPending state doesn't leak across tabs.
-        self.ui.vim = narwhal_vim::Vim::new();
+        self.reset_vim();
     }
 
     /// Cycle through the per-statement results inside the active tab's

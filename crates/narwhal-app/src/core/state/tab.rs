@@ -57,6 +57,8 @@ pub struct Tab {
     /// minimal (just a scroll cursor); the body is reconstructed from
     /// `pending` every render.
     pub(crate) pending_preview: Option<PendingPreviewState>,
+    /// Vim visual-mode anchor; the selection spans anchor..=cursor.
+    pub(crate) visual_anchor: Option<(usize, usize)>,
     /// per-tab tree-sitter parser. Lazily initialised on the
     /// first highlight request so a tab that never opens an editor
     /// (e.g. one used only via :run) pays nothing. `None` after
@@ -108,6 +110,7 @@ impl Tab {
             diagram: None,
             pending: PendingChanges::new(),
             pending_preview: None,
+            visual_anchor: None,
             ts_parser: None,
             sql_highlights: None,
             sql_highlights_buf_len: 0,

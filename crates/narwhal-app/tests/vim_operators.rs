@@ -127,3 +127,65 @@ async fn yw_yanks_word() {
         "yanked text should contain 'foo', got: {yanked}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn visual_selection_yanks_moved_range() {
+    let (mut core, clip) = core_with_clipboard();
+    type_text(&mut core, "foo bar baz").await;
+    core.handle_key(key(KeyCode::Char('0'))).await;
+    core.handle_key(key(KeyCode::Char('w'))).await;
+    core.handle_key(key(KeyCode::Char('v'))).await;
+    core.handle_key(key(KeyCode::Right)).await;
+    core.handle_key(key(KeyCode::Char('l'))).await;
+    core.handle_key(key(KeyCode::Char('y'))).await;
+    assert_eq!(clip.read().as_deref(), Some("bar"));
+    assert_eq!(core.editor().lines(), &["foo bar baz"]);
+    assert!(core.editor().selection().is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn visual_line_deletes_whole_line() {
+    let (mut core, _clip) = core_with_clipboard();
+    type_text(&mut core, "a\nb\nc").await;
+    core.handle_key(key(KeyCode::Char('k'))).await;
+    core.handle_key(key(KeyCode::Char('V'))).await;
+    core.handle_key(key(KeyCode::Char('d'))).await;
+    assert_eq!(core.editor().lines(), &["a", "c"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn delete_key_removes_char_under_cursor() {
+    let (mut core, _clip) = core_with_clipboard();
+    type_text(&mut core, "abc\nd").await;
+    core.handle_key(key(KeyCode::Char('k'))).await;
+    core.handle_key(key(KeyCode::Char('0'))).await;
+    core.handle_key(key(KeyCode::Delete)).await;
+    assert_eq!(core.editor().lines(), &["bc", "d"]);
+    core.handle_key(key(KeyCode::Char('i'))).await;
+    core.handle_key(key(KeyCode::End)).await;
+    core.handle_key(key(KeyCode::Delete)).await;
+    assert_eq!(core.editor().lines(), &["bcd"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn x_copies_and_never_joins_lines() {
+    let (mut core, clip) = core_with_clipboard();
+    type_text(&mut core, "ab\ncd").await;
+    core.handle_key(key(KeyCode::Char('k'))).await;
+    core.handle_key(key(KeyCode::Char('0'))).await;
+    core.handle_key(key(KeyCode::Char('x'))).await;
+    assert_eq!(clip.read().as_deref(), Some("a"));
+    core.handle_key(key(KeyCode::Char('$'))).await;
+    core.handle_key(key(KeyCode::Char('x'))).await;
+    core.handle_key(key(KeyCode::Char('x'))).await;
+    assert_eq!(core.editor().lines(), &["b", "cd"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn count_g_jumps_to_line() {
+    let (mut core, _clip) = core_with_clipboard();
+    type_text(&mut core, "a\nb\nc").await;
+    core.handle_key(key(KeyCode::Char('2'))).await;
+    core.handle_key(key(KeyCode::Char('G'))).await;
+    assert_eq!(core.editor().cursor_row(), 1);
+}

@@ -20,7 +20,15 @@ Standard subset: `hjkl`, `w` / `b` / `e`, `0` / `$` / `gg` / `G`,
 `u` / `Ctrl-R`, `/` and `?` search, `:` command mode.
 
 Visual mode accepts count prefixes (`3j`). Operators chain with
-motions (`d3w`, `c$`).
+motions (`d3w`, `c$`). `5G` / `5gg` jump to line 5.
+
+`x` deletes the character under the cursor into the clipboard (never
+joins lines). `Delete` deletes forward; at end of line it joins the
+next line. Both act on every cursor when multi-cursor is active.
+
+In visual mode, `hjkl` / arrows / `w` / `b` / `0` / `$` / `Home` /
+`End` / `G` extend the highlighted selection; `y` copies it, `d` / `x` /
+`Delete` cut it, `c` replaces it. A mouse click leaves visual mode.
 
 The mode indicator in the status bar shows `NORMAL` / `INSERT` /
 `VISUAL` / `V-LINE` / `V-BLOCK`. Disable with

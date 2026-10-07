@@ -29,6 +29,8 @@ pub enum Action {
     InsertText(String),
     /// Delete one character.
     DeleteChar,
+    /// Delete the character under / after the cursor (Delete key, `x`).
+    DeleteCharForward,
     /// Mode transition.
     EnterMode(Mode),
     /// Submit the current command-line buffer.

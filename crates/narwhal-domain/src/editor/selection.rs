@@ -83,7 +83,9 @@ impl Selection {
     /// `true` when anchor and head occupy the same position.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.anchor.0 == self.head.0 && self.anchor.1 == self.head.1
+        !matches!(self.kind, SelectionKind::Line)
+            && self.anchor.0 == self.head.0
+            && self.anchor.1 == self.head.1
     }
 
     /// Returns `(start, end)` with `start <= end` lexicographically.

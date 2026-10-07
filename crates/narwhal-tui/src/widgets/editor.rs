@@ -3,7 +3,7 @@
 //! ratatui binding that turns the buffer into glyphs on the terminal.
 
 use narwhal_domain::editor::{
-    CompletionPopupView, EditorBuffer, EditorSearchHighlight, floor_char_boundary,
+    CompletionPopupView, EditorBuffer, EditorSearchHighlight, SelectionKind, floor_char_boundary,
 };
 use narwhal_sql::treesitter::HighlightSpan;
 use ratatui::Frame;
@@ -155,6 +155,41 @@ pub fn render_editor(
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, inner);
+
+    if let Some(sel) = buffer.selection().filter(|s| !s.is_empty()) {
+        let (start, stop) = sel.normalised();
+        let line_wise = sel.kind == SelectionKind::Line;
+        for row in start.0.max(buffer.scroll())..stop.0.saturating_add(1).min(end) {
+            let line = &buffer.lines()[row];
+            let from = if line_wise || row > start.0 {
+                0
+            } else {
+                start.1
+            };
+            let to = if line_wise || row < stop.0 {
+                line.len()
+            } else {
+                stop.1
+            };
+            let from = line[..floor_char_boundary(line, from)].width();
+            // Highlight one cell past EOL so selected newlines/empty lines show.
+            let to = line[..floor_char_boundary(line, to)].width()
+                + usize::from(row < stop.0 || line_wise);
+            let x = gutter_w + from;
+            if x >= inner.width as usize || to <= from {
+                continue;
+            }
+            let rect = Rect {
+                x: inner.x + x as u16,
+                y: inner.y + (row - buffer.scroll()) as u16,
+                width: (to - from).min(inner.width as usize - x) as u16,
+                height: 1,
+            };
+            frame
+                .buffer_mut()
+                .set_style(rect, Style::default().add_modifier(Modifier::REVERSED));
+        }
+    }
 
     if focused && buffer.cursor_row() >= buffer.scroll() {
         let cursor_y = (buffer.cursor_row() - buffer.scroll()) as u16;

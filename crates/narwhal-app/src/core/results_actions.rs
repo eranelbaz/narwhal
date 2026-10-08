@@ -359,14 +359,10 @@ impl AppCore {
         }
         let (pretty, parse_error) = Self::prettify_json(&raw);
         let title = format!("{column_name} ({column_type})");
-        self.ui.tabs[self.ui.active_tab].json_viewer = Some(JsonViewerState {
-            title,
-            pretty,
-            raw,
-            scroll: 0,
-            parse_error,
-        });
-        self.ui.status.message = "JSON viewer: j/k scroll · y copy · q close".into();
+        self.ui.tabs[self.ui.active_tab].json_viewer =
+            Some(JsonViewerState::new(title, pretty, raw, parse_error));
+        self.ui.status.message =
+            "JSON viewer: j/k move · V select · y copy · c copy value · q close".into();
     }
 
     /// Open the JSON viewer from inside the row-detail modal: the
@@ -391,14 +387,10 @@ impl AppCore {
         }
         let title = format!("{} ({})", column.name, column.data_type);
         let (pretty, parse_error) = Self::prettify_json(&raw);
-        self.ui.tabs[self.ui.active_tab].json_viewer = Some(JsonViewerState {
-            title,
-            pretty,
-            raw,
-            scroll: 0,
-            parse_error,
-        });
-        self.ui.status.message = "JSON viewer: j/k scroll · y copy · q close".into();
+        self.ui.tabs[self.ui.active_tab].json_viewer =
+            Some(JsonViewerState::new(title, pretty, raw, parse_error));
+        self.ui.status.message =
+            "JSON viewer: j/k move · V select · y copy · c copy value · q close".into();
     }
 
     /// Modal handler for the JSON viewer. Owns its own key vocabulary;
@@ -410,48 +402,92 @@ impl AppCore {
         let Some(state) = self.ui.tabs[active].json_viewer.as_mut() else {
             return;
         };
-        let total_lines = state.pretty.lines().count() as u16;
-        let max_scroll = total_lines.saturating_sub(1);
-        match key.code {
+        let last = state.pretty.lines().count().saturating_sub(1);
+        let page = 10;
+        let move_to = |state: &mut JsonViewerState, line: usize| {
+            state.cursor = line.min(last);
+            let cursor = u16::try_from(state.cursor).unwrap_or(u16::MAX);
+            let height = state.viewport.max(1);
+            if cursor < state.scroll {
+                state.scroll = cursor;
+            } else if cursor >= state.scroll.saturating_add(height) {
+                state.scroll = cursor - height + 1;
+            }
+        };
+        let text = match key.code {
+            CtKey::Esc if state.anchor.is_some() => {
+                state.anchor = None;
+                None
+            }
             CtKey::Esc | CtKey::Char('q') => {
                 self.ui.tabs[active].json_viewer = None;
                 self.ui.status.message = "JSON viewer closed".into();
+                None
             }
             CtKey::Char('j') | CtKey::Down => {
-                state.scroll = state.scroll.saturating_add(1).min(max_scroll);
+                move_to(state, state.cursor + 1);
+                None
             }
             CtKey::Char('k') | CtKey::Up => {
-                state.scroll = state.scroll.saturating_sub(1);
+                move_to(state, state.cursor.saturating_sub(1));
+                None
             }
             CtKey::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                state.scroll = state.scroll.saturating_add(10).min(max_scroll);
+                move_to(state, state.cursor + page);
+                None
             }
             CtKey::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                state.scroll = state.scroll.saturating_sub(10);
+                move_to(state, state.cursor.saturating_sub(page));
+                None
             }
-            CtKey::Char('g') => state.scroll = 0,
-            CtKey::Char('G') => state.scroll = max_scroll,
-            CtKey::Char('y') => {
-                let text = state.pretty.clone();
-                let len = text.len();
-                match self.deps.clipboard.set_text(&text) {
-                    Ok(()) => {
-                        self.ui.status.message = format!("yanked {len} char(s) (pretty)");
-                    }
-                    Err(e) => self.ui.status.message = format!("yank failed: {e}"),
+            CtKey::Char('g') => {
+                move_to(state, 0);
+                None
+            }
+            CtKey::Char('G') => {
+                move_to(state, last);
+                None
+            }
+            CtKey::Char('V' | 'v') => {
+                state.anchor = match state.anchor {
+                    Some(_) => None,
+                    None => Some(state.cursor),
+                };
+                None
+            }
+            CtKey::Char('y') => Some(match state.selection() {
+                Some((from, to)) => {
+                    state.anchor = None;
+                    let lines: Vec<&str> = state.pretty.lines().collect();
+                    (lines[from..=to].join("\n"), "selection")
                 }
-            }
-            CtKey::Char('Y') => {
-                let text = state.raw.clone();
-                let len = text.len();
-                match self.deps.clipboard.set_text(&text) {
-                    Ok(()) => {
-                        self.ui.status.message = format!("yanked {len} char(s) (raw)");
-                    }
-                    Err(e) => self.ui.status.message = format!("yank failed: {e}"),
+                None => (state.pretty.clone(), "pretty"),
+            }),
+            CtKey::Char('Y') => Some((state.raw.clone(), "raw")),
+            CtKey::Char('c') => {
+                let value = state
+                    .parse_error
+                    .is_none()
+                    .then(|| {
+                        narwhal_domain::result::actions::json_value_at_line(
+                            &state.pretty,
+                            state.cursor,
+                        )
+                    })
+                    .flatten();
+                if value.is_none() {
+                    self.ui.status.message = "no value on this line".into();
                 }
+                value.map(|v| (v, "value"))
             }
-            _ => {}
+            _ => None,
+        };
+        if let Some((text, what)) = text {
+            let len = text.chars().count();
+            self.ui.status.message = match self.deps.clipboard.set_text(&text) {
+                Ok(()) => format!("yanked {len} char(s) ({what})"),
+                Err(e) => format!("yank failed: {e}"),
+            };
         }
     }
 

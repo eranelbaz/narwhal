@@ -124,6 +124,32 @@ async fn drag_extends_selection() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vim_y_yanks_mouse_selection() {
+    let clip = Arc::new(InMemoryClipboard::new());
+    let mut core = setup(clip.clone()).await;
+    core.insert_into_editor("hello world").await;
+    let mut settings = Settings::default();
+    settings.editor.mode = EditorMode::Vim;
+    settings.editor.mouse = MouseSelectionMode::Enabled;
+    core.apply_settings(settings);
+    render(&mut core);
+
+    let (ox, oy) = editor_text_origin(&core);
+    core.handle_mouse(mouse(ox, oy, MouseEventKind::Down(MouseButton::Left)))
+        .await;
+    core.handle_mouse(mouse(ox + 5, oy, MouseEventKind::Drag(MouseButton::Left)))
+        .await;
+    core.handle_mouse(mouse(ox + 5, oy, MouseEventKind::Up(MouseButton::Left)))
+        .await;
+    core.handle_key(crossterm::event::KeyEvent::from(
+        crossterm::event::KeyCode::Char('y'),
+    ))
+    .await;
+    assert_eq!(clip.read().as_deref(), Some("hello"));
+    assert_eq!(core.editor().lines(), &["hello world"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn double_click_selects_word() {
     let mut core = setup(Arc::new(InMemoryClipboard::new())).await;
     core.insert_into_editor("hello world").await;

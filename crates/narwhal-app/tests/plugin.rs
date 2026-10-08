@@ -671,13 +671,9 @@ async fn help_with_builtin_arg_describes_it() {
         "expected :help open to mention 'open', got: {msg}"
     );
 
-    // :help with no arg still shows the one-liner.
+    // :help with no arg opens the keybinding cheatsheet.
     core.execute_command("help").await;
-    let msg = core.status_message();
-    assert!(
-        msg.contains("quit"),
-        "expected :help to list commands, got: {msg}"
-    );
+    assert!(core.help_open(), "expected :help to open the help modal");
 
     // :help with an unknown name.
     core.execute_command("help nonexistent-cmd").await;

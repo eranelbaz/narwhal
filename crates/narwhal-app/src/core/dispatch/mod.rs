@@ -1,7 +1,7 @@
 //! `AppCore` top-level dispatch: render, key/mouse handling, the
 //! `:`-prompt command parser, snippet insertion.
 
-use crossterm::event::{KeyCode as CtKey, KeyEvent};
+use crossterm::event::{KeyCode as CtKey, KeyEvent, KeyModifiers};
 use narwhal_domain::Motion as DomainMotion;
 use narwhal_tui::{
     ChartPlaceholder, ChartView, ChartViewKind, CompletionItemView, CompletionPopupView,
@@ -256,7 +256,14 @@ impl AppCore {
                 narwhal_config::EditorMode::Emacs => HelpEditorMode::Emacs,
                 _ => HelpEditorMode::Vim,
             };
-            render_help_modal(frame, area, &self.ui.theme, help_mode);
+            self.modals.help_max_scroll = render_help_modal(
+                frame,
+                area,
+                &self.ui.theme,
+                help_mode,
+                self.modals.help_scroll,
+            );
+            self.modals.help_scroll = self.modals.help_scroll.min(self.modals.help_max_scroll);
         }
 
         if let Some(state) = self.modals.history.as_ref() {
@@ -491,15 +498,18 @@ impl AppCore {
         // JSON viewer (L36) — stacks above every other overlay so it
         // can be opened from the cell popup *or* from inside the row
         // detail modal.
-        if let Some(state) = self.ui.tabs[self.ui.active_tab].json_viewer.as_ref() {
+        if let Some(state) = self.ui.tabs[self.ui.active_tab].json_viewer.as_mut() {
             let view = narwhal_tui::JsonViewerView {
                 title: &state.title,
                 pretty: &state.pretty,
                 raw: &state.raw,
                 scroll: state.scroll,
                 parse_error: state.parse_error.as_deref(),
+                cursor: state.cursor,
+                selection: state.selection(),
             };
-            narwhal_tui::render_json_viewer(frame, area, &view, &self.ui.theme);
+            (state.viewport, state.scroll) =
+                narwhal_tui::render_json_viewer(frame, area, &view, &self.ui.theme);
         }
     }
 
@@ -548,13 +558,27 @@ impl AppCore {
         // close and silently consumes every other key so the user
         // doesn't accidentally trigger an action behind the overlay.
         if self.modals.help_open {
+            let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+            let m = &mut self.modals;
             match key.code {
-                CtKey::Esc | CtKey::F(1) => {
-                    self.modals.help_open = false;
+                CtKey::Esc | CtKey::F(1) | CtKey::Char('q') => {
+                    m.help_open = false;
                 }
                 CtKey::Char('?') if key.modifiers.is_empty() => {
-                    self.modals.help_open = false;
+                    m.help_open = false;
                 }
+                CtKey::Char('j') | CtKey::Down => {
+                    m.help_scroll = (m.help_scroll + 1).min(m.help_max_scroll);
+                }
+                CtKey::Char('k') | CtKey::Up => m.help_scroll = m.help_scroll.saturating_sub(1),
+                CtKey::Char('d') if ctrl => {
+                    m.help_scroll = (m.help_scroll + 10).min(m.help_max_scroll);
+                }
+                CtKey::Char('u') if ctrl => m.help_scroll = m.help_scroll.saturating_sub(10),
+                CtKey::PageDown => m.help_scroll = (m.help_scroll + 10).min(m.help_max_scroll),
+                CtKey::PageUp => m.help_scroll = m.help_scroll.saturating_sub(10),
+                CtKey::Char('g') => m.help_scroll = 0,
+                CtKey::Char('G') => m.help_scroll = m.help_max_scroll,
                 _ => {
                     // consumed but no-op
                 }
@@ -1168,11 +1192,7 @@ impl AppCore {
             Command::CloseTab => self.close_tab().await,
             Command::NextTab => self.cycle_tab(1).await,
             Command::PrevTab => self.cycle_tab(-1).await,
-            Command::Help(None) => {
-                self.ui.status.message =
-                    "open <name> · close · refresh · run · run-all · stream · stream-all · explain · export <csv|json|insert> <path> · cancel · quit"
-                        .into();
-            }
+            Command::Help(None) => self.open_help().await,
             Command::Help(Some(name)) => {
                 // Built-ins first — aliases (`o`, `q`, ...) resolve back
                 // to their primary key before the lookup.

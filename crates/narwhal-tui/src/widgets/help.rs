@@ -49,11 +49,11 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             },
             CheatsheetEntry {
                 keys: "F4 / Ctrl-C",
-                description: "cancel running query",
+                description: "cancel running query (while one runs)",
             },
             CheatsheetEntry {
                 keys: "Ctrl-W",
-                description: "cycle pane focus",
+                description: "cycle pane focus (basic/emacs: not from editor)",
             },
             CheatsheetEntry {
                 keys: ":",
@@ -68,8 +68,36 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "cycle tabs",
             },
             CheatsheetEntry {
-                keys: "? / F1",
-                description: "this help",
+                keys: "F1 / ? (outside editor) / :help",
+                description: "this help (j/k, Ctrl-D/U, g/G scroll)",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-Shift-W",
+                description: "cycle pane focus backwards",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-S (vim editor)",
+                description: "stream statement under cursor",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-R",
+                description: "query history (Shift-Enter inserts + runs)",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-N",
+                description: "goto: fuzzy jump to table / column",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-PgDn / Ctrl-PgUp",
+                description: "next / prev result tab",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-P / Ctrl-Shift-P",
+                description: "goto / command palette (vscode preset)",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-B / Ctrl-Enter",
+                description: "focus sidebar / run (datagrip, intellij preset)",
             },
             CheatsheetEntry {
                 keys: ":q",
@@ -97,12 +125,12 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "enter insert mode",
             },
             CheatsheetEntry {
-                keys: "Esc",
+                keys: "Esc / Ctrl-C / Ctrl-[ / Ctrl-G",
                 description: "back to normal mode",
             },
             CheatsheetEntry {
-                keys: "Tab / Ctrl-Space",
-                description: "completion",
+                keys: "Tab / Ctrl-Space (insert)",
+                description: "completion; Ctrl-N / Ctrl-P / Esc in popup",
             },
             CheatsheetEntry {
                 keys: "↑ ↓ / Shift-Tab",
@@ -125,16 +153,48 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "line start / end",
             },
             CheatsheetEntry {
+                keys: "gg / G / {N}G",
+                description: "first / last / Nth line",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-D / Ctrl-U",
+                description: "10 lines down / up",
+            },
+            CheatsheetEntry {
+                keys: "{N} before a motion",
+                description: "repeat count (3j, 2dw)",
+            },
+            CheatsheetEntry {
+                keys: "/ / ? / n / N",
+                description: "search forward / backward / next / prev",
+            },
+            CheatsheetEntry {
                 keys: "v / V",
                 description: "visual / visual-line mode",
             },
             CheatsheetEntry {
-                keys: "d / y / c",
-                description: "delete / yank / change selection (visual)",
+                keys: "d / y / c + motion",
+                description: "operator: dd yy cc, dw, d$, dG, dgg …",
+            },
+            CheatsheetEntry {
+                keys: "d / y / c (visual)",
+                description: "delete / yank / change selection",
+            },
+            CheatsheetEntry {
+                keys: "y / d (mouse selection)",
+                description: "yank / delete the dragged selection",
             },
             CheatsheetEntry {
                 keys: "x / Del",
                 description: "delete char under cursor",
+            },
+            CheatsheetEntry {
+                keys: "Alt-N / Alt-A",
+                description: "multi-cursor: add next / all matches",
+            },
+            CheatsheetEntry {
+                keys: "Esc (multi-cursor)",
+                description: "collapse to primary cursor",
             },
         ],
     },
@@ -146,8 +206,16 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "navigate",
             },
             CheatsheetEntry {
+                keys: "Ctrl-D / Ctrl-U / PgDn / PgUp",
+                description: "page down / up",
+            },
+            CheatsheetEntry {
+                keys: "Home / End",
+                description: "first / last item",
+            },
+            CheatsheetEntry {
                 keys: "Enter",
-                description: "describe table",
+                description: "connect / describe table",
             },
             CheatsheetEntry {
                 keys: "o",
@@ -156,6 +224,10 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             CheatsheetEntry {
                 keys: "d",
                 description: "inject DDL into editor",
+            },
+            CheatsheetEntry {
+                keys: "D / gd",
+                description: "ER diagram focused on table",
             },
         ],
     },
@@ -172,19 +244,27 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             },
             CheatsheetEntry {
                 keys: "e",
-                description: "edit cell value",
+                description: "edit cell value (Enter commit, Esc cancel)",
             },
             CheatsheetEntry {
                 keys: "y / Y",
                 description: "yank cell / row to clipboard",
             },
             CheatsheetEntry {
-                keys: "/",
-                description: "filter rows",
+                keys: "R / Shift-Enter",
+                description: "row detail modal",
             },
             CheatsheetEntry {
-                keys: "n / N",
-                description: "next / prev search match",
+                keys: "s",
+                description: "cycle sort on column: asc / desc / off",
+            },
+            CheatsheetEntry {
+                keys: "/",
+                description: "filter rows (Enter apply, Esc clear)",
+            },
+            CheatsheetEntry {
+                keys: "Esc",
+                description: "clear filter",
             },
             CheatsheetEntry {
                 keys: "g / G",
@@ -193,6 +273,14 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             CheatsheetEntry {
                 keys: ":next / :prev",
                 description: "page through results",
+            },
+            CheatsheetEntry {
+                keys: "]r / [r",
+                description: "next / prev statement result",
+            },
+            CheatsheetEntry {
+                keys: "f",
+                description: "follow foreign key to parent row",
             },
             // ─── L36: row CRUD + pending changes ──────────────
             CheatsheetEntry {
@@ -222,12 +310,166 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             },
             // ─── L36: JSON viewer ──────────────────────────────
             CheatsheetEntry {
-                keys: "z / Z",
-                description: "open JSON viewer (cell / whole row)",
+                keys: "z",
+                description: "open JSON viewer on cell",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "Cell popup / row detail",
+        entries: &[
+            CheatsheetEntry {
+                keys: "Esc / q / Enter",
+                description: "close cell popup",
             },
             CheatsheetEntry {
-                keys: "j/k/Ctrl-D/U/g/G in viewer",
-                description: "scroll JSON viewer; y/Y yank, q/Esc close",
+                keys: "j / k / PgDn / PgUp / g / G",
+                description: "move between columns (row detail)",
+            },
+            CheatsheetEntry {
+                keys: "Z",
+                description: "open JSON viewer on column (row detail)",
+            },
+            CheatsheetEntry {
+                keys: "Esc / R / Shift-Enter",
+                description: "close row detail",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "JSON viewer",
+        entries: &[
+            CheatsheetEntry {
+                keys: "j / k / Ctrl-D / Ctrl-U / g / G",
+                description: "move cursor",
+            },
+            CheatsheetEntry {
+                keys: "V / v",
+                description: "toggle line selection",
+            },
+            CheatsheetEntry {
+                keys: "y",
+                description: "yank selection (or whole document)",
+            },
+            CheatsheetEntry {
+                keys: "c",
+                description: "copy value on cursor line",
+            },
+            CheatsheetEntry {
+                keys: "Y",
+                description: "yank raw cell text",
+            },
+            CheatsheetEntry {
+                keys: "Esc",
+                description: "clear selection, then close",
+            },
+            CheatsheetEntry {
+                keys: "q",
+                description: "close",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "Pending changes (Ctrl-P)",
+        entries: &[
+            CheatsheetEntry {
+                keys: "j / k / Ctrl-D / Ctrl-U / g / G",
+                description: "scroll",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-S / Ctrl-X",
+                description: "commit / discard",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-P / Esc / q",
+                description: "close",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "Diagram",
+        entries: &[
+            CheatsheetEntry {
+                keys: "Tab / Shift-Tab / j / k",
+                description: "cycle selected table",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-D / Ctrl-U / g / G",
+                description: "scroll",
+            },
+            CheatsheetEntry {
+                keys: "Enter",
+                description: "recenter on selected table",
+            },
+            CheatsheetEntry {
+                keys: "i",
+                description: "toggle focused / full view",
+            },
+            CheatsheetEntry {
+                keys: "y",
+                description: "yank as Mermaid",
+            },
+            CheatsheetEntry {
+                keys: "Esc / q",
+                description: "close",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "Pickers (goto / history / snippets / settings)",
+        entries: &[
+            CheatsheetEntry {
+                keys: "type",
+                description: "filter",
+            },
+            CheatsheetEntry {
+                keys: "j / k / ↑ / ↓ / Ctrl-J / Ctrl-K",
+                description: "move selection (goto also Ctrl-N / Ctrl-P)",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-U",
+                description: "clear query (goto)",
+            },
+            CheatsheetEntry {
+                keys: "Enter",
+                description: "accept",
+            },
+            CheatsheetEntry {
+                keys: "j / k (settings)",
+                description: "next / prev field",
+            },
+            CheatsheetEntry {
+                keys: "Tab / Shift-Tab (settings)",
+                description: "next / prev section",
+            },
+            CheatsheetEntry {
+                keys: "Space / Enter (settings)",
+                description: "toggle / cycle field",
+            },
+            CheatsheetEntry {
+                keys: "Ctrl-S",
+                description: "settings: save",
+            },
+            CheatsheetEntry {
+                keys: "Esc",
+                description: "close",
+            },
+        ],
+    },
+    CheatsheetSection {
+        title: "Confirm / context menu",
+        entries: &[
+            CheatsheetEntry {
+                keys: "type YES + Enter",
+                description: "confirm a guarded write (Ctrl-U clears, Esc cancels)",
+            },
+            CheatsheetEntry {
+                keys: "right-click (editor)",
+                description: "context menu: j / k, Enter / Space, Esc",
+            },
+            CheatsheetEntry {
+                keys: "mouse",
+                description: "click / drag select, double / triple click, middle paste",
             },
         ],
     },
@@ -265,6 +507,18 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             CheatsheetEntry {
                 keys: "pgpass / env",
                 description: "PGPASSWORD / MYSQL_PWD / ~/.pgpass picked up automatically",
+            },
+            CheatsheetEntry {
+                keys: "Tab / ↓ / Shift-Tab / ↑ (wizard)",
+                description: "next / prev field",
+            },
+            CheatsheetEntry {
+                keys: "← / → (wizard driver field)",
+                description: "cycle driver",
+            },
+            CheatsheetEntry {
+                keys: "Enter / Esc (wizard)",
+                description: "save / cancel",
             },
             CheatsheetEntry {
                 keys: "Tab on path field",
@@ -314,8 +568,12 @@ pub const CHEATSHEET_BASIC_EDITOR: &[CheatsheetEntry] = &[
         description: "move cursor",
     },
     CheatsheetEntry {
-        keys: "Ctrl-Arrow",
-        description: "word / paragraph jump",
+        keys: "Ctrl-← / Ctrl-→",
+        description: "word jump",
+    },
+    CheatsheetEntry {
+        keys: "Ctrl-Home / Ctrl-End / PgUp / PgDn",
+        description: "buffer start / end, page",
     },
     CheatsheetEntry {
         keys: "Shift-Arrow",
@@ -334,11 +592,11 @@ pub const CHEATSHEET_BASIC_EDITOR: &[CheatsheetEntry] = &[
         description: "paste clipboard",
     },
     CheatsheetEntry {
-        keys: "Ctrl-Z / Ctrl-Y",
+        keys: "Ctrl-Z / Ctrl-Y / Ctrl-Shift-Z",
         description: "undo / redo",
     },
     CheatsheetEntry {
-        keys: "Ctrl-F",
+        keys: "Ctrl-F / /",
         description: "find in buffer",
     },
     CheatsheetEntry {
@@ -394,11 +652,11 @@ pub const CHEATSHEET_EMACS_EDITOR: &[CheatsheetEntry] = &[
         description: "kill to end of line",
     },
     CheatsheetEntry {
-        keys: "C-d / M-d",
+        keys: "C-d / Del / M-d",
         description: "delete char / word",
     },
     CheatsheetEntry {
-        keys: "C-/ or C-_",
+        keys: "C-/ / C-_ / C-x u",
         description: "undo",
     },
     CheatsheetEntry {
@@ -410,8 +668,20 @@ pub const CHEATSHEET_EMACS_EDITOR: &[CheatsheetEntry] = &[
         description: "submit / run statement",
     },
     CheatsheetEntry {
-        keys: "C-g",
+        keys: "C-g / Esc",
         description: "cancel / clear region",
+    },
+    CheatsheetEntry {
+        keys: "Arrows / Home / End",
+        description: "move cursor",
+    },
+    CheatsheetEntry {
+        keys: "Tab",
+        description: "completion / indent",
+    },
+    CheatsheetEntry {
+        keys: ":",
+        description: "open command palette",
     },
 ];
 
@@ -423,22 +693,24 @@ pub const CHEATSHEET_EMACS_EDITOR: &[CheatsheetEntry] = &[
 ///
 /// `editor_mode` swaps the editor-section content between vim,
 /// basic and emacs without rebuilding the entire cheatsheet.
+/// Returns the largest useful scroll offset so the host can clamp.
 pub fn render_help_modal(
     frame: &mut Frame<'_>,
     area: Rect,
     theme: &Theme,
     editor_mode: HelpEditorMode,
-) {
+    scroll: u16,
+) -> u16 {
     let (max_width, max_height) = crate::constants::HELP_MODAL_MAX;
     let width = (area.width * 8 / 10).min(max_width);
     let height = (area.height * 9 / 10).min(max_height);
     if width < 30 || height < 8 {
-        return;
+        return 0;
     }
     let popup = centred(area, width, height);
     frame.render_widget(Clear, popup);
 
-    let title = " help · esc closes ";
+    let title = " help · j/k Ctrl-D/U g/G scroll · esc/q closes ";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.accent))
@@ -483,13 +755,20 @@ pub fn render_help_modal(
         )));
         for entry in entries {
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<28}", entry.keys), key_style),
+                Span::styled(format!("  {:<36} ", entry.keys), key_style),
                 Span::styled(entry.description, desc_style),
             ]));
         }
     }
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    let max_scroll = u16::try_from(lines.len())
+        .unwrap_or(u16::MAX)
+        .saturating_sub(inner.height);
+    frame.render_widget(
+        Paragraph::new(lines).scroll((scroll.min(max_scroll), 0)),
+        inner,
+    );
+    max_scroll
 }
 
 pub(crate) use super::centred_rect as centred;

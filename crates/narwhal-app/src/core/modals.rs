@@ -17,10 +17,12 @@ use crate::wizard::DRIVERS;
 impl AppCore {
     pub async fn open_help(&mut self) {
         self.modals.help_open = true;
+        self.modals.help_scroll = 0;
     }
 
     pub(super) async fn toggle_help(&mut self) {
         self.modals.help_open = !self.modals.help_open;
+        self.modals.help_scroll = 0;
     }
 
     /// Open the Ctrl+R history modal. Dispatches a background

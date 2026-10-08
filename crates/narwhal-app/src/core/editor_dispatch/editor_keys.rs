@@ -184,6 +184,18 @@ impl AppCore {
             self.trigger_completion().await;
             return;
         }
+        if self.ui.vim.mode() == Mode::Normal
+            && self.ui.tabs[self.ui.active_tab].editor.has_selection()
+            && key.modifiers.difference(KeyModifiers::SHIFT).is_empty()
+        {
+            match key.code {
+                CtKey::Char('y') => return self.apply_visual_operator(Operator::Yank),
+                CtKey::Char('d' | 'x') | CtKey::Delete => {
+                    return self.apply_visual_operator(Operator::Delete);
+                }
+                _ => {}
+            }
+        }
         let Some(logical) = translate_key_event(key) else {
             return;
         };

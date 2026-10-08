@@ -182,6 +182,38 @@ pub struct JsonViewerState {
     /// Filled in when `serde_json::from_str` failed; surfaces as a
     /// muted footer hint.
     pub parse_error: Option<String>,
+    /// Line under the cursor (0-based).
+    pub cursor: usize,
+    /// Line-visual anchor; `Some` while `V` selection is active.
+    pub anchor: Option<usize>,
+    /// Body height from the last render, used to keep the cursor visible.
+    pub viewport: u16,
+}
+
+impl JsonViewerState {
+    pub const fn new(
+        title: String,
+        pretty: String,
+        raw: String,
+        parse_error: Option<String>,
+    ) -> Self {
+        Self {
+            title,
+            pretty,
+            raw,
+            scroll: 0,
+            parse_error,
+            cursor: 0,
+            anchor: None,
+            viewport: 0,
+        }
+    }
+
+    /// Inclusive line range of the visual selection, if any.
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        self.anchor
+            .map(|a| (a.min(self.cursor), a.max(self.cursor)))
+    }
 }
 
 /// In-flight row detail modal. `R` (or Shift+Enter) opens it from the

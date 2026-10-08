@@ -5,65 +5,65 @@ expression: "snapshot_core_sized(&mut core, 130, 66)"
 ┌ narwhal ───────────────────────┐┌ editor ──────────────────────────────────────────────────────────────────────────────────────┐
 │                                ││  1 │                                                                                         │
 │  no connections yet            ││                                                                                              │
-│                            ┌ help · esc closes ───────────────────────────────────────────────────┐                            │
-│  press :add to create one  │ Global                                                               │                            │
-│  or  :url <dsn> to paste a │  F5 / Alt-Enter / Ctrl-;     run statement under cursor              │                            │
-│                            │  F6                          run whole buffer                        │                            │
-│  press ? for help          │  F7                          stream cursor statement                 │                            │
-│                            │  F4 / Ctrl-C                 cancel running query                    │                            │
-│                            │  Ctrl-W                      cycle pane focus                        │                            │
-│                            │  :                           command palette (any pane)              │                            │
-│                            │  Ctrl-T                      new editor tab                          │                            │
-│                            │  Ctrl-Tab / Ctrl-Shift-Tab   cycle tabs                              │                            │
-│                            │  ? / F1                      this help                               │                            │
-│                            │  :q                          quit                                    │                            │
-│                            │  :refresh                    re-fetch schema tree for active connecti│                            │
-│                            │  :format / :fmt              pretty-print the statement under the cur│                            │
-│                            │  :format-all / :fmtall       pretty-print every statement in the buff│                            │
-│                            │                                                                      │                            │
-│                            │ Editor (vim)                                                         │                            │
-│                            │  i / a                       enter insert mode                       │                            │
-│                            │  Esc                         back to normal mode                     │                            │
-│                            │  Tab / Ctrl-Space            completion                              │                            │
-│                            │  ↑ ↓ / Shift-Tab             cycle popup items                       │                            │
-│                            │  Enter / Tab (in popup)      accept completion                       │                            │
-│                            │  h j k l / arrows            move cursor                             │                            │
-│                            │  w / b                       word forward / backward                 │                            │
-│                            │  0 / $                       line start / end                        │                            │
-│                            │  v / V                       visual / visual-line mode               │                            │
-│                            │  d / y / c                   delete / yank / change selection (visual│                            │
-│                            │  x / Del                     delete char under cursor                │                            │
-│                            │                                                                      │                            │
-│                            │ Sidebar                                                              │                            │
-│                            │  j / k / ↑ / ↓               navigate                                │                            │
-│                            │  Enter                       describe table                          │                            │
-│                            │  o                           preview table data                      │────────────────────────────┘
-│                            │  d                           inject DDL into editor                  │────────────────────────────┐
-│                            │                                                                      │hole buffer, Ctrl-Space     │
-│                            │ Results                                                              │                            │
-│                            │  h j k l / arrows            move selection                          │                            │
-│                            │  Enter                       open cell popup                         │                            │
-│                            │  e                           edit cell value                         │                            │
-│                            │  y / Y                       yank cell / row to clipboard            │                            │
-│                            │  /                           filter rows                             │                            │
-│                            │  n / N                       next / prev search match                │                            │
-│                            │  g / G                       jump to first / last row                │                            │
-│                            │  :next / :prev               page through results                    │                            │
-│                            │  o / O                       queue INSERT (empty / duplicate row)    │                            │
-│                            │  d                           queue DELETE for the focused row        │                            │
-│                            │  Ctrl-S                      commit every staged mutation in a txn   │                            │
-│                            │  Ctrl-X                      discard the staged-mutation queue       │                            │
-│                            │  Ctrl-P                      toggle the pending-changes preview modal│                            │
-│                            │  1 / 2 / 3 / 4 / 5           switch metadata tab: Records / Columns /│                            │
-│                            │  z / Z                       open JSON viewer (cell / whole row)     │                            │
-│                            │  j/k/Ctrl-D/U/g/G in viewer  scroll JSON viewer; y/Y yank, q/Esc clos│                            │
-│                            │                                                                      │                            │
-│                            │ Connections                                                          │                            │
-│                            │  :add                        open the connection wizard (empty form) │                            │
-│                            │  :url <dsn>                  prefill the wizard from a connection URL│                            │
-│                            │  :test [name|url]            dry-run a connection without opening a s│                            │
-│                            │  :edit <name>                edit a saved connection in the wizard   │                            │
-│                            └──────────────────────────────────────────────────────────────────────┘                            │
+│            ┌ help · j/k Ctrl-D/U g/G scroll · esc/q closes ───────────────────────────────────────────────────────┐            │
+│  press :add│ Global                                                                                               │            │
+│  or  :url <│  F5 / Alt-Enter / Ctrl-;              run statement under cursor                                     │            │
+│            │  F6                                   run whole buffer                                               │            │
+│  press ? fo│  F7                                   stream cursor statement                                        │            │
+│            │  F4 / Ctrl-C                          cancel running query (while one runs)                          │            │
+│            │  Ctrl-W                               cycle pane focus (basic/emacs: not from editor)                │            │
+│            │  :                                    command palette (any pane)                                     │            │
+│            │  Ctrl-T                               new editor tab                                                 │            │
+│            │  Ctrl-Tab / Ctrl-Shift-Tab            cycle tabs                                                     │            │
+│            │  F1 / ? (outside editor) / :help      this help (j/k, Ctrl-D/U, g/G scroll)                          │            │
+│            │  Ctrl-Shift-W                         cycle pane focus backwards                                     │            │
+│            │  Ctrl-S (vim editor)                  stream statement under cursor                                  │            │
+│            │  Ctrl-R                               query history (Shift-Enter inserts + runs)                     │            │
+│            │  Ctrl-N                               goto: fuzzy jump to table / column                             │            │
+│            │  Ctrl-PgDn / Ctrl-PgUp                next / prev result tab                                         │            │
+│            │  Ctrl-P / Ctrl-Shift-P                goto / command palette (vscode preset)                         │            │
+│            │  Ctrl-B / Ctrl-Enter                  focus sidebar / run (datagrip, intellij preset)                │            │
+│            │  :q                                   quit                                                           │            │
+│            │  :refresh                             re-fetch schema tree for active connection                     │            │
+│            │  :format / :fmt                       pretty-print the statement under the cursor                    │            │
+│            │  :format-all / :fmtall                pretty-print every statement in the buffer                     │            │
+│            │                                                                                                      │            │
+│            │ Editor (vim)                                                                                         │            │
+│            │  i / a                                enter insert mode                                              │            │
+│            │  Esc / Ctrl-C / Ctrl-[ / Ctrl-G       back to normal mode                                            │            │
+│            │  Tab / Ctrl-Space (insert)            completion; Ctrl-N / Ctrl-P / Esc in popup                     │            │
+│            │  ↑ ↓ / Shift-Tab                      cycle popup items                                              │            │
+│            │  Enter / Tab (in popup)               accept completion                                              │            │
+│            │  h j k l / arrows                     move cursor                                                    │            │
+│            │  w / b                                word forward / backward                                        │            │
+│            │  0 / $                                line start / end                                               │            │
+│            │  gg / G / {N}G                        first / last / Nth line                                        │────────────┘
+│            │  Ctrl-D / Ctrl-U                      10 lines down / up                                             │────────────┐
+│            │  {N} before a motion                  repeat count (3j, 2dw)                                         │l-Space     │
+│            │  / / ? / n / N                        search forward / backward / next / prev                        │            │
+│            │  v / V                                visual / visual-line mode                                      │            │
+│            │  d / y / c + motion                   operator: dd yy cc, dw, d$, dG, dgg …                          │            │
+│            │  d / y / c (visual)                   delete / yank / change selection                               │            │
+│            │  y / d (mouse selection)              yank / delete the dragged selection                            │            │
+│            │  x / Del                              delete char under cursor                                       │            │
+│            │  Alt-N / Alt-A                        multi-cursor: add next / all matches                           │            │
+│            │  Esc (multi-cursor)                   collapse to primary cursor                                     │            │
+│            │                                                                                                      │            │
+│            │ Sidebar                                                                                              │            │
+│            │  j / k / ↑ / ↓                        navigate                                                       │            │
+│            │  Ctrl-D / Ctrl-U / PgDn / PgUp        page down / up                                                 │            │
+│            │  Home / End                           first / last item                                              │            │
+│            │  Enter                                connect / describe table                                       │            │
+│            │  o                                    preview table data                                             │            │
+│            │  d                                    inject DDL into editor                                         │            │
+│            │  D / gd                               ER diagram focused on table                                    │            │
+│            │                                                                                                      │            │
+│            │ Results                                                                                              │            │
+│            │  h j k l / arrows                     move selection                                                 │            │
+│            │  Enter                                open cell popup                                                │            │
+│            │  e                                    edit cell value (Enter commit, Esc cancel)                     │            │
+│            │  y / Y                                yank cell / row to clipboard                                   │            │
+│            └──────────────────────────────────────────────────────────────────────────────────────────────────────┘            │
 │                                ││                                                                                              │
 │                                ││                                                                                              │
 └────────────────────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────┘

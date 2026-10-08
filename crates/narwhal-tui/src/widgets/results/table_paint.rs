@@ -40,7 +40,11 @@ pub(super) fn draw_table(
     // Cache for the host app to look up original row indices.
     view.visible_indices = visible.clone();
 
-    let widths = compute_column_widths(columns, rows);
+    let mut widths = compute_column_widths(columns, rows);
+    let used: usize = widths.iter().sum::<usize>() + widths.len().saturating_sub(1);
+    if let Some(last) = widths.last_mut() {
+        *last += usize::from(table_area.width).saturating_sub(used);
+    }
     let header_cells: Vec<Cell<'_>> = columns
         .iter()
         .enumerate()

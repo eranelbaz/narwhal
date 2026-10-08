@@ -247,3 +247,22 @@ async fn null_or_empty_cell_does_not_open_modal() {
     );
     assert!(core.status_message().contains("NULL") || core.status_message().contains("empty"));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn visual_line_yank_and_value_copy() {
+    let (mut core, clipboard) = open_with_payload(r#"{"a":"x1","b":2,"c":3}"#).await;
+    core.handle_key(key(KeyCode::Char('z'))).await;
+
+    core.handle_key(key(KeyCode::Char('j'))).await;
+    core.handle_key(key(KeyCode::Char('c'))).await;
+    assert_eq!(clipboard.read().as_deref(), Some("x1"));
+
+    core.handle_key(key(KeyCode::Char('V'))).await;
+    core.handle_key(key(KeyCode::Char('j'))).await;
+    core.handle_key(key(KeyCode::Char('y'))).await;
+    assert_eq!(
+        clipboard.read().as_deref(),
+        Some("  \"a\": \"x1\",\n  \"b\": 2,")
+    );
+    assert!(core.json_viewer_for_test().unwrap().anchor.is_none());
+}

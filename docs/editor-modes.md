@@ -15,9 +15,11 @@ mid-edit does not lose your text.
 
 ## Vim mode (default)
 
-Standard subset: `hjkl`, `w` / `b` / `e`, `0` / `$` / `gg` / `G`,
-`i` / `a` / `o`, `dd` / `yy` / `dw` / `cc`, `v` / `V` / `Ctrl-V`,
-`u` / `Ctrl-R`, `/` and `?` search, `:` command mode.
+Standard subset: `hjkl`, `w` / `b`, `0` / `$` / `gg` / `G`,
+`Ctrl-D` / `Ctrl-U`, `i` / `a`, `dd` / `yy` / `dw` / `cc`, `v` / `V`,
+`/` and `?` search with `n` / `N`, `:` command mode. No undo/redo or
+`o` yet. With a mouse selection active in normal mode, `y` / `d`
+act on the selection.
 
 Visual mode accepts count prefixes (`3j`). Operators chain with
 motions (`d3w`, `c$`). `5G` / `5gg` jump to line 5.
@@ -31,23 +33,21 @@ In visual mode, `hjkl` / arrows / `w` / `b` / `0` / `$` / `Home` /
 `Delete` cut it, `c` replaces it. A mouse click leaves visual mode.
 
 The mode indicator in the status bar shows `NORMAL` / `INSERT` /
-`VISUAL` / `V-LINE` / `V-BLOCK`. Disable with
+`VISUAL` / `V-LINE`. Disable with
 `[editor].show_mode_indicator = false`.
 
 ## Basic mode
 
 Modeless, IDE-style. Typing inserts. Selection extends with
-`Shift-Arrow`. `Ctrl-S` runs the buffer.
+`Shift-Arrow`. Run with `F5` / `F6` / `Alt-Enter`.
 
 | Chord         | Action                          |
 |---------------|---------------------------------|
-| `Ctrl-S`      | Run buffer (same as F6)         |
 | `Ctrl-Z`      | Undo                            |
-| `Ctrl-Shift-Z`| Redo                            |
+| `Ctrl-Y` / `Ctrl-Shift-Z` | Redo                |
 | `Ctrl-X` / `Ctrl-C` / `Ctrl-V` | Cut / copy / paste |
 | `Ctrl-A`      | Select all                      |
-| `Ctrl-F`      | Find                            |
-| `Ctrl-/`      | Toggle line comment             |
+| `Ctrl-F` / `/` | Find                           |
 
 ## Emacs mode
 
@@ -59,11 +59,16 @@ Classic Emacs chords with a `C-x` prefix for two-key sequences.
 | `C-n` / `C-p` | Next / previous line            |
 | `C-a` / `C-e` | Beginning / end of line         |
 | `M-f` / `M-b` | Forward / backward word         |
-| `C-d`       | Delete char forward               |
+| `M-<` / `M->` | Beginning / end of buffer       |
+| `C-Space`   | Set mark                          |
+| `C-g`       | Cancel / clear region             |
+| `C-d` / `M-d` | Delete char / word forward      |
 | `C-k`       | Kill to end of line               |
 | `C-w` / `M-w` | Cut / copy selection            |
 | `C-y`       | Yank                              |
-| `C-x C-s`   | Run buffer                        |
+| `C-/` / `C-_` | Undo                            |
+| `C-s` / `C-r` | Search forward / backward       |
+| `C-x C-s`   | Run statement under cursor        |
 | `C-x u`     | Undo                              |
 
 When the `C-x` prefix is armed, the mode indicator flips to `C-x`.

@@ -222,6 +222,9 @@ pub struct ModalState {
     /// `F1` / `?` help overlay. Boolean because the overlay has no
     /// internal state — it just dims everything behind it.
     pub help_open: bool,
+    /// Help overlay scroll offset; clamped by the renderer.
+    pub help_scroll: u16,
+    pub help_max_scroll: u16,
     /// "type YES to run" confirmation. Opened by the
     /// write-guard before a mutating batch reaches the driver on a
     /// connection that opted in to `confirm_writes = true`.

@@ -198,6 +198,35 @@ pub fn prettify_json(raw: &str) -> (String, Option<String>) {
     }
 }
 
+/// Value on `line` of `serde_json` pretty output: strings come back
+/// unquoted, objects/arrays opened on that line come back whole.
+pub fn json_value_at_line(pretty: &str, line: usize) -> Option<String> {
+    let lines: Vec<&str> = pretty.lines().collect();
+    let first = *lines.get(line)?;
+    let indent = first.len() - first.trim_start().len();
+    let mut text = first.trim_start().to_owned();
+    if text.ends_with('{') || text.ends_with('[') {
+        let close_idx = line
+            + 1
+            + lines[line + 1..].iter().position(|l| {
+                l.len() - l.trim_start().len() == indent && l.trim_start().starts_with(['}', ']'])
+            })?;
+        for l in &lines[line + 1..=close_idx] {
+            text.push('\n');
+            text.push_str(l.get(indent..).unwrap_or(l));
+        }
+    }
+    let text = text.strip_suffix(',').unwrap_or(&text);
+    let value = match serde_json::from_str::<serde_json::Value>(&format!("{{{text}}}")) {
+        Ok(serde_json::Value::Object(m)) if m.len() == 1 => m.into_iter().next()?.1,
+        _ => serde_json::from_str(text).ok()?,
+    };
+    match value {
+        serde_json::Value::String(s) => Some(s),
+        v => serde_json::to_string_pretty(&v).ok(),
+    }
+}
+
 // ---------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------
@@ -812,6 +841,21 @@ mod tests {
         let (raw, err) = prettify_json("not json");
         assert_eq!(raw, "not json");
         assert!(err.is_some());
+    }
+
+    #[test]
+    fn json_value_at_line_extracts_scalars_and_containers() {
+        let (pretty, _) = prettify_json(r#"{"id":"abc","n":3,"o":{"k":[1,2]}}"#);
+        assert_eq!(json_value_at_line(&pretty, 1).as_deref(), Some("abc"));
+        assert_eq!(json_value_at_line(&pretty, 2).as_deref(), Some("3"));
+        assert_eq!(
+            json_value_at_line(&pretty, 3).as_deref(),
+            Some("{\n  \"k\": [\n    1,\n    2\n  ]\n}")
+        );
+        assert_eq!(json_value_at_line(&pretty, 5).as_deref(), Some("1"));
+        assert_eq!(json_value_at_line(&pretty, 7), None);
+        assert_eq!(json_value_at_line(&pretty, 0), Some(pretty.clone()));
+        assert_eq!(json_value_at_line(&pretty, 99), None);
     }
 
     #[test]

@@ -132,3 +132,15 @@ async fn snapshot_help_modal() {
     assert!(core.help_open());
     assert_snapshot!("help_modal", snapshot_core_sized(&mut core, 130, 66));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn help_modal_scrolls_to_last_section_and_colon_help_opens_it() {
+    use crossterm::event::{KeyCode, KeyEvent};
+    let mut core = empty_state();
+    core.execute_command("help").await;
+    assert!(core.help_open());
+    snapshot_core_sized(&mut core, 130, 66);
+    core.handle_key(KeyEvent::from(KeyCode::Char('G'))).await;
+    let screen = snapshot_core_sized(&mut core, 130, 66);
+    assert!(screen.contains(":snippets"), "G must reach the last entry");
+}

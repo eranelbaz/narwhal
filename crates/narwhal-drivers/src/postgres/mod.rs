@@ -863,6 +863,25 @@ impl Connection for PostgresConnection {
         ddl::build_create_table(self, schema, name).await
     }
 
+    async fn list_enum_values(&mut self, type_name: &str) -> Result<Vec<String>> {
+        const SQL: &str = "
+            SELECT e.enumlabel::text
+            FROM pg_catalog.pg_enum e
+            WHERE e.enumtypid = pg_catalog.to_regtype($1::text)
+            ORDER BY e.enumsortorder";
+        let result = self
+            .run(SQL, &[Value::String(type_name.to_owned())])
+            .await?;
+        Ok(result
+            .rows
+            .into_iter()
+            .filter_map(|row| match row.0.into_iter().next() {
+                Some(Value::String(s)) => Some(s),
+                _ => None,
+            })
+            .collect())
+    }
+
     async fn ping(&mut self) -> Result<()> {
         self.client
             .simple_query("SELECT 1")

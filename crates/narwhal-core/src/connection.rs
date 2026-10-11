@@ -496,6 +496,16 @@ pub trait Connection: Send + Sync {
         async { Err(crate::Error::unsupported("fetch_ddl")) }
     }
 
+    /// Labels of the enum type named exactly as `describe_table` reports
+    /// it, in declaration order. Empty when the type is not an enum or
+    /// the driver has no enums.
+    fn list_enum_values(
+        &mut self,
+        _type_name: &str,
+    ) -> impl Future<Output = Result<Vec<String>>> + Send {
+        async { Ok(Vec::new()) }
+    }
+
     /// Toggle session-level read-only enforcement.
     ///
     /// When `true`, the driver instructs the database engine to refuse
@@ -593,6 +603,10 @@ pub trait DynConnection: Send + Sync {
         schema: &'a str,
         table: &'a str,
     ) -> BoxFuture<'a, Result<String>>;
+
+    /// See [`Connection::list_enum_values`].
+    fn list_enum_values<'a>(&'a mut self, type_name: &'a str)
+    -> BoxFuture<'a, Result<Vec<String>>>;
 
     fn set_read_only<'a>(&'a mut self, read_only: bool) -> BoxFuture<'a, Result<()>>;
 
@@ -693,6 +707,13 @@ where
         table: &'a str,
     ) -> BoxFuture<'a, Result<String>> {
         Box::pin(<Self as Connection>::fetch_ddl(self, schema, table))
+    }
+
+    fn list_enum_values<'a>(
+        &'a mut self,
+        type_name: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<String>>> {
+        Box::pin(<Self as Connection>::list_enum_values(self, type_name))
     }
 
     fn set_read_only<'a>(&'a mut self, read_only: bool) -> BoxFuture<'a, Result<()>> {

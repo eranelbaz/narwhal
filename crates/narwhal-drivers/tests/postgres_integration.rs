@@ -294,3 +294,45 @@ async fn describe_table_reports_indexes_and_foreign_keys() {
             .any(|u| u.name == "uniq_orders" && u.columns == vec!["customer_id", "placed_at"])
     );
 }
+
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn enum_values_resolve_from_format_type_output() {
+    let harness = Harness::start().await;
+    let mut conn = harness.connect().await;
+    conn.execute(
+        "CREATE TYPE \"RecommendationType\" AS ENUM ('CONTENT','BLOG','TECHNICAL','PR','THIRD_PARTY')",
+        &[],
+    )
+    .await
+    .unwrap();
+    conn.execute(
+        "CREATE TABLE recommendations (id INT, type \"RecommendationType\", title TEXT)",
+        &[],
+    )
+    .await
+    .unwrap();
+
+    let ts = conn
+        .describe_table("public", "recommendations")
+        .await
+        .unwrap();
+    let ty = &ts
+        .columns
+        .iter()
+        .find(|c| c.name == "type")
+        .unwrap()
+        .data_type;
+    assert_eq!(ty, "\"RecommendationType\"");
+    assert_eq!(
+        conn.list_enum_values(ty).await.unwrap(),
+        ["CONTENT", "BLOG", "TECHNICAL", "PR", "THIRD_PARTY"]
+    );
+    assert!(conn.list_enum_values("text").await.unwrap().is_empty());
+    assert!(
+        conn.list_enum_values("no_such_type")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

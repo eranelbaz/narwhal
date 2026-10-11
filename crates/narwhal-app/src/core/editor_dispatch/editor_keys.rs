@@ -8,10 +8,13 @@ use narwhal_tui::translate_key_event;
 use narwhal_vim::{Action, Mode, Motion as VimMotion, Operator};
 
 use crate::completion::{
-    CompletionContext, detect_context_with_schemas, gather as gather_completions,
+    CompletionContext, detect_context, detect_context_with_schemas, gather as gather_completions,
 };
 use crate::core::{AppCore, CompletionState};
 use crate::meta::MetaUpdate;
+
+const METADATA_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+const ENUM_RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// True when the word being completed starts immediately after a `.`
 /// (`ast.|` or `ast.i|`), i.e. a column reference rather than a
@@ -20,6 +23,14 @@ pub(crate) fn right_after_dot(buffer: &str, cursor_offset: usize, prefix: &str) 
     buffer
         .get(..cursor_offset.saturating_sub(prefix.len()))
         .is_some_and(|before| before.ends_with('.'))
+}
+
+/// True when the word being completed starts immediately after a `'`
+/// (`= '|` or `= 'TH|`), i.e. inside a string literal.
+pub(crate) fn right_after_quote(buffer: &str, cursor_offset: usize, prefix: &str) -> bool {
+    buffer
+        .get(..cursor_offset.saturating_sub(prefix.len()))
+        .is_some_and(|before| before.ends_with('\''))
 }
 
 /// Convert a `narwhal_vim::Motion` to `narwhal_domain::Motion`.
@@ -79,9 +90,7 @@ impl AppCore {
         }
         state.selected = index;
         let choice = state.items[index].text.clone();
-        self.ui.tabs[self.ui.active_tab]
-            .editor
-            .replace_current_word_with(&choice);
+        self.accept_completion_text(&choice);
         self.ui.tabs[self.ui.active_tab].completion = None;
         self.ui.status.message = format!("completed: {choice}");
     }
@@ -246,8 +255,10 @@ impl AppCore {
     /// reply ([`MetaUpdate::ColumnsFetched`]) fills the cache and
     /// refreshes the popup, so a slow remote describe never blocks typing.
     pub(crate) fn ensure_columns_cached(&mut self, context: &CompletionContext) {
-        let CompletionContext::ColumnExpected { table } = context else {
-            return;
+        let table = match context {
+            CompletionContext::ColumnExpected { table }
+            | CompletionContext::ValueExpected { table, .. } => table,
+            _ => return,
         };
         let Some(session) = self.session.active.as_mut() else {
             return;
@@ -270,10 +281,22 @@ impl AppCore {
         let meta_tx = self.process.meta_tx.clone();
         tokio::spawn(async move {
             let result = async {
-                let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
-                conn.describe_table(&schema, &real_name)
+                let mut conn = tokio::time::timeout(METADATA_FETCH_TIMEOUT, pool.acquire())
                     .await
-                    .map_err(|e| e.to_string())
+                    .map_err(|_| "pool busy".to_owned())?
+                    .map_err(|e| e.to_string())?;
+                match tokio::time::timeout(
+                    METADATA_FETCH_TIMEOUT,
+                    conn.describe_table(&schema, &real_name),
+                )
+                .await
+                {
+                    Ok(r) => r.map_err(|e| e.to_string()),
+                    Err(_) => {
+                        conn.invalidate();
+                        Err("timed out".to_owned())
+                    }
+                }
             }
             .await
             .map(|ts| {
@@ -296,12 +319,102 @@ impl AppCore {
         });
     }
 
+    /// Fetch enum labels for `context`'s column type in the background
+    /// once its columns are cached; [`MetaUpdate::EnumValuesFetched`]
+    /// fills the cache and refreshes the popup. Failures back off for
+    /// [`ENUM_RETRY_BACKOFF`] before the next keystroke retries.
+    pub(crate) fn ensure_enum_values_cached(&mut self, context: &CompletionContext) {
+        let CompletionContext::ValueExpected { table, column } = context else {
+            return;
+        };
+        let Some(session) = self.session.active.as_mut() else {
+            return;
+        };
+        let Some(type_name) = session
+            .column_cache
+            .get(table)
+            .and_then(|(_, cols)| cols.iter().find(|c| c.name.eq_ignore_ascii_case(column)))
+            .map(|c| c.data_type.clone())
+        else {
+            return;
+        };
+        let backing_off = session
+            .enum_failed_at
+            .get(&type_name)
+            .is_some_and(|t| t.elapsed() < ENUM_RETRY_BACKOFF);
+        if backing_off
+            || session.enum_cache.contains_key(&type_name)
+            || !session.enums_in_flight.insert(type_name.clone())
+        {
+            return;
+        }
+        let pool = session.pool.clone();
+        let session_id = session.config.id;
+        let generation = session.enum_generation;
+        let meta_tx = self.process.meta_tx.clone();
+        tokio::spawn(async move {
+            let result = async {
+                let mut conn = tokio::time::timeout(METADATA_FETCH_TIMEOUT, pool.acquire())
+                    .await
+                    .map_err(|_| "pool busy".to_owned())?
+                    .map_err(|e| e.to_string())?;
+                match tokio::time::timeout(
+                    METADATA_FETCH_TIMEOUT,
+                    conn.list_enum_values(&type_name),
+                )
+                .await
+                {
+                    Ok(r) => r.map_err(|e| e.to_string()),
+                    Err(_) => {
+                        conn.invalidate();
+                        Err("timed out".to_owned())
+                    }
+                }
+            }
+            .await;
+            let _ = meta_tx
+                .send(MetaUpdate::EnumValuesFetched {
+                    session_id,
+                    generation,
+                    type_name,
+                    result,
+                })
+                .await;
+        });
+    }
+
+    /// Whether the cursor sits in an enum-value position (`q.col = |`).
+    pub(crate) fn in_value_position(&self) -> bool {
+        let editor = &self.ui.tabs[self.ui.active_tab].editor;
+        matches!(
+            detect_context(&editor.entire_text(), editor.cursor_byte_offset()),
+            CompletionContext::ValueExpected { .. }
+        )
+    }
+
+    /// Whether column or enum metadata for a value context is still loading.
+    pub(crate) fn value_fetch_pending(&self, context: &CompletionContext) -> bool {
+        let CompletionContext::ValueExpected { table, column } = context else {
+            return false;
+        };
+        let Some(session) = self.session.active.as_ref() else {
+            return false;
+        };
+        session.columns_in_flight.contains(table)
+            || session
+                .column_cache
+                .get(table)
+                .and_then(|(_, cols)| cols.iter().find(|c| c.name.eq_ignore_ascii_case(column)))
+                .is_some_and(|c| session.enums_in_flight.contains(&c.data_type))
+    }
+
     /// Refresh-or-close the completion popup based on the current word
     /// prefix. Called after every insert-mode keystroke. See
     /// [`Self::trigger_completion`] for the manual (Tab / Ctrl-Space)
     /// variant that handles the empty-prefix and no-matches cases
     /// explicitly.
     pub(crate) async fn maybe_auto_complete(&mut self) {
+        self.ui.completion_manual_pending = None;
         let prefix = self.ui.tabs[self.ui.active_tab]
             .editor
             .current_word_prefix();
@@ -314,24 +427,34 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
-        // Columns open right after `ident.`; everything else waits for 2 chars.
-        let min_prefix = if right_after_dot(&buffer_text, offset, &prefix) {
+        // Columns open right after `ident.`, values right after `'`;
+        // everything else waits for 2 chars.
+        let value_quote = matches!(context, CompletionContext::ValueExpected { .. })
+            && right_after_quote(&buffer_text, offset, &prefix);
+        let min_prefix = if right_after_dot(&buffer_text, offset, &prefix) || value_quote {
             0
         } else {
             2
         };
+        self.ensure_columns_cached(&context);
+        self.ensure_enum_values_cached(&context);
         if prefix.len() < min_prefix {
             self.ui.tabs[self.ui.active_tab].completion = None;
             return;
         }
-        self.ensure_columns_cached(&context);
         let schemas = self
             .session
             .active
             .as_ref()
             .map_or(&[][..], |s| s.schemas.as_slice());
         let columns = self.column_cache().await;
-        let items = gather_completions(&prefix, schemas, &context, &columns, 50);
+        let empty = std::collections::HashMap::new();
+        let enums = self
+            .session
+            .active
+            .as_ref()
+            .map_or(&empty, |s| &s.enum_cache);
+        let items = gather_completions(&prefix, schemas, &context, &columns, enums, 50);
         if items.is_empty() {
             self.ui.tabs[self.ui.active_tab].completion = None;
             return;

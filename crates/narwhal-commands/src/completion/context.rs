@@ -24,6 +24,9 @@ pub enum CompletionContext {
     /// Cursor sits right after `schema.` — suggest tables that live in
     /// the named schema (e.g. `public.`).
     SchemaTableExpected { schema: String },
+    /// Cursor sits right after `ident.column =` — suggest literal
+    /// values for that column (enum labels). `table` is alias-resolved.
+    ValueExpected { table: String, column: String },
 }
 
 /// Walk backward from `cursor_byte_offset` inside `buffer`, stopping at
@@ -68,6 +71,20 @@ pub fn detect_context_with_schemas(
         alias_map.entry(alias).or_insert(table);
     }
 
+    if let Some((qualifier, column)) = value_target(before_cursor) {
+        let typed_quote = before_cursor
+            .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+            .ends_with('\'');
+        let mid_word = after_cursor
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        if !mid_word && (typed_quote || !after_cursor.trim_start().starts_with('\'')) {
+            let table = alias_map.get(&qualifier).cloned().unwrap_or(qualifier);
+            return CompletionContext::ValueExpected { table, column };
+        }
+    }
+
     // Walk tokens in reverse so the *closest* keyword to the cursor
     // wins (handles nested clauses like `SELECT ... FROM (SELECT ...`).
     let mut saw_dot = false;
@@ -91,7 +108,7 @@ pub fn detect_context_with_schemas(
                 last_keyword = Some(kw);
                 break;
             }
-            Token::StringLiteral | Token::Other => {}
+            Token::StringLiteral | Token::Other | Token::Eq => {}
         }
     }
 
@@ -189,6 +206,22 @@ fn consume_alias(
         let alias_lc = alias.to_ascii_lowercase();
         map.insert(alias_lc, table_name.to_owned());
         *i += 1;
+    }
+}
+
+/// `… q.col = ` / `… q.col = 'pre` / `… q.col = pre` → `(q, col)`, lowercased.
+fn value_target(before_cursor: &str) -> Option<(String, String)> {
+    let head = before_cursor.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
+    let head = head.strip_suffix('\'').unwrap_or(head);
+    match tokenize(head).as_slice() {
+        [
+            ..,
+            Token::Ident(q) | Token::Keyword(q),
+            Token::Dot,
+            Token::Ident(c) | Token::Keyword(c),
+            Token::Eq,
+        ] => Some((q.to_ascii_lowercase(), c.to_ascii_lowercase())),
+        _ => None,
     }
 }
 

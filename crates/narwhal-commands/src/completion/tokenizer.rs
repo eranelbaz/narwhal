@@ -15,6 +15,8 @@ pub(super) enum Token {
     Dot,
     /// String literal — skipped for context purposes.
     StringLiteral,
+    /// `=` comparison operator.
+    Eq,
     /// Anything else (operators, parentheses, etc.).
     Other,
 }
@@ -111,6 +113,12 @@ pub(super) fn tokenize(input: &str) -> Vec<Token> {
             } else {
                 tokens.push(Token::Ident(word.to_owned()));
             }
+            continue;
+        }
+
+        if bytes[i] == b'=' {
+            tokens.push(Token::Eq);
+            i += 1;
             continue;
         }
 

@@ -307,6 +307,10 @@ impl AppCore {
                     session.schemas = schemas;
                     session.column_cache.clear();
                     session.columns_in_flight.clear();
+                    session.enum_cache.clear();
+                    session.enums_in_flight.clear();
+                    session.enum_failed_at.clear();
+                    session.enum_generation += 1;
                     session.table_schema_cache.clear();
                 }
                 self.rebuild_sidebar();
@@ -455,7 +459,39 @@ impl AppCore {
                         self.ui.completion_refresh_pending = true;
                     }
                     Err(message) => {
+                        self.ui.completion_manual_pending = None;
                         self.ui.status.message = format!("columns for {table}: {message}");
+                    }
+                }
+            }
+            MetaUpdate::EnumValuesFetched {
+                session_id,
+                generation,
+                type_name,
+                result,
+            } => {
+                let Some(session) = self
+                    .session
+                    .active
+                    .as_mut()
+                    .filter(|s| s.config.id == session_id && s.enum_generation == generation)
+                else {
+                    return;
+                };
+                session.enums_in_flight.remove(&type_name);
+                self.ui.completion_refresh_pending |= self.ui.completion_manual_pending.is_some();
+                match result {
+                    Ok(labels) => {
+                        self.ui.completion_refresh_pending |= !labels.is_empty();
+                        session.enum_failed_at.remove(&type_name);
+                        session.enum_cache.insert(type_name, labels);
+                    }
+                    Err(message) => {
+                        session
+                            .enum_failed_at
+                            .insert(type_name.clone(), std::time::Instant::now());
+                        self.ui.completion_manual_pending = None;
+                        self.ui.status.message = format!("enum values for {type_name}: {message}");
                     }
                 }
             }
@@ -556,7 +592,14 @@ impl AppCore {
                 _ => true,
             };
         if typing && !self.modals.any_open_except_context_menu() {
-            self.maybe_auto_complete().await;
+            let here = self.completion_anchor();
+            if self.ui.completion_manual_pending.take() == Some(here) {
+                self.trigger_completion().await;
+            } else {
+                self.maybe_auto_complete().await;
+            }
+        } else {
+            self.ui.completion_manual_pending = None;
         }
     }
 

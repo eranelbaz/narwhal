@@ -3,23 +3,40 @@
 use crossterm::event::{KeyCode as CtKey, KeyEvent};
 
 use super::editor_keys::right_after_dot;
-use crate::completion::{detect_context_with_schemas, gather as gather_completions};
+use crate::completion::{
+    CompletionContext, detect_context_with_schemas, gather as gather_completions,
+};
 use crate::core::text_utils::longest_common_prefix;
 use crate::core::{AppCore, CompletionState};
 
 impl AppCore {
+    pub(crate) fn completion_anchor(&self) -> (u64, usize, usize) {
+        let tab = &self.ui.tabs[self.ui.active_tab];
+        let (row, col) = tab.editor.cursor();
+        (tab.id, row, col)
+    }
+
+    fn insert_indent(&mut self) {
+        let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+        let before = buf.snapshot();
+        if buf.has_selection() {
+            let _ = buf.delete_selection();
+        }
+        buf.insert_str("    ");
+        buf.commit_undo_snapshot(before);
+    }
+
+    pub(crate) fn accept_completion_text(&mut self, text: &str) {
+        let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+        let before = buf.snapshot();
+        buf.replace_word_with_literal(text);
+        buf.commit_undo_snapshot(before);
+    }
+
     pub(crate) async fn trigger_completion(&mut self) {
         let prefix = self.ui.tabs[self.ui.active_tab]
             .editor
             .current_word_prefix();
-        let editor = &self.ui.tabs[self.ui.active_tab].editor;
-        if prefix.is_empty()
-            && !right_after_dot(&editor.entire_text(), editor.cursor_byte_offset(), "")
-        {
-            // Empty prefix: behave like a plain insert (4 spaces).
-            self.ui.tabs[self.ui.active_tab].editor.insert_str("    ");
-            return;
-        }
         let schemas = self
             .session
             .active
@@ -29,24 +46,44 @@ impl AppCore {
         let buffer_text = self.ui.tabs[self.ui.active_tab].editor.entire_text();
         let offset = self.ui.tabs[self.ui.active_tab].editor.cursor_byte_offset();
         let context = detect_context_with_schemas(&buffer_text, offset, &known_schemas);
+        if prefix.is_empty()
+            && !right_after_dot(&buffer_text, offset, "")
+            && !matches!(context, CompletionContext::ValueExpected { .. })
+        {
+            // Empty prefix: behave like a plain insert (4 spaces).
+            self.insert_indent();
+            return;
+        }
         self.ensure_columns_cached(&context);
+        self.ensure_enum_values_cached(&context);
         let schemas = self
             .session
             .active
             .as_ref()
             .map_or(&[][..], |s| s.schemas.as_slice());
         let columns = self.column_cache().await;
-        let items = gather_completions(&prefix, schemas, &context, &columns, 50);
+        let empty = std::collections::HashMap::new();
+        let enums = self
+            .session
+            .active
+            .as_ref()
+            .map_or(&empty, |s| &s.enum_cache);
+        let items = gather_completions(&prefix, schemas, &context, &columns, enums, 50);
         if items.is_empty() {
-            self.ui.status.message = format!("no completions for '{prefix}'");
+            if self.value_fetch_pending(&context) {
+                self.ui.completion_manual_pending = Some(self.completion_anchor());
+                self.ui.status.message = "loading values…".into();
+            } else if prefix.is_empty() {
+                self.insert_indent();
+            } else {
+                self.ui.status.message = format!("no completions for '{prefix}'");
+            }
             return;
         }
         if items.len() == 1 {
             // Exactly one match: insert it without showing the popup.
             let only = items[0].text.clone();
-            self.ui.tabs[self.ui.active_tab]
-                .editor
-                .replace_current_word_with(&only);
+            self.accept_completion_text(&only);
             self.ui.status.message = format!("completed: {only}");
             return;
         }
@@ -84,9 +121,7 @@ impl AppCore {
             }
             CtKey::Enter | CtKey::Tab => {
                 let choice = state.items[state.selected].text.clone();
-                self.ui.tabs[self.ui.active_tab]
-                    .editor
-                    .replace_current_word_with(&choice);
+                self.accept_completion_text(&choice);
                 self.ui.tabs[self.ui.active_tab].completion = None;
                 self.ui.status.message = format!("completed: {choice}");
                 true

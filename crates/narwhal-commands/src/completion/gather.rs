@@ -14,8 +14,15 @@ pub fn gather(
     schemas: &[SchemaListing],
     context: &CompletionContext,
     columns: &HashMap<String, (String, Vec<ColumnHeader>)>,
+    enum_values: &HashMap<String, Vec<String>>,
     limit: usize,
 ) -> Vec<Completion> {
+    if let CompletionContext::ValueExpected { table, column } = context {
+        let labels = enum_labels(prefix, table, column, columns, enum_values, limit);
+        if !labels.is_empty() {
+            return labels;
+        }
+    }
     // `ident.` alone lists every column; elsewhere completion stays opt-in.
     if prefix.is_empty() && !matches!(context, CompletionContext::ColumnExpected { .. }) {
         return Vec::new();
@@ -94,7 +101,7 @@ pub fn gather(
                 }
             }
         }
-        CompletionContext::Generic => {
+        CompletionContext::ValueExpected { .. } | CompletionContext::Generic => {
             for keyword in KEYWORDS {
                 push(Completion {
                     text: (*keyword).to_owned(),
@@ -146,4 +153,30 @@ pub fn gather(
     out.extend(substr_hits);
     out.truncate(limit);
     out
+}
+
+/// Quoted enum labels for `table.column` matching `prefix`, in declared order.
+fn enum_labels(
+    prefix: &str,
+    table: &str,
+    column: &str,
+    columns: &HashMap<String, (String, Vec<ColumnHeader>)>,
+    enum_values: &HashMap<String, Vec<String>>,
+    limit: usize,
+) -> Vec<Completion> {
+    let lower_prefix = prefix.to_lowercase();
+    columns
+        .get(table)
+        .and_then(|(_, cols)| cols.iter().find(|c| c.name.eq_ignore_ascii_case(column)))
+        .and_then(|c| enum_values.get(&c.data_type))
+        .into_iter()
+        .flatten()
+        .filter(|l| l.to_lowercase().starts_with(&lower_prefix))
+        .take(limit)
+        .map(|l| Completion {
+            text: format!("'{}'", l.replace('\'', "''")),
+            kind: CompletionKind::Value,
+            detail: None,
+        })
+        .collect()
 }

@@ -17,6 +17,8 @@ pub enum CompletionKind {
     /// Inserted with the trailing `(` so the cursor lands inside the
     /// argument list ready for the user to type the column.
     Function,
+    /// Literal value for a typed column (e.g. a Postgres enum label).
+    Value,
 }
 
 /// Single completion candidate.

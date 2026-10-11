@@ -1084,6 +1084,30 @@ impl EditorBuffer {
         self.cursor_col = start + replacement.len();
     }
 
+    /// Like [`Self::replace_current_word_with`] for a quoted literal:
+    /// reuses a `'` typed before the word and an auto-paired `'` after
+    /// the cursor instead of doubling them, then steps past the close.
+    pub fn replace_word_with_literal(&mut self, replacement: &str) {
+        let end = self.cursor_col.min(self.current_line().len());
+        let start = end.saturating_sub(self.current_word_prefix().len());
+        let line = self.current_line();
+        let literal =
+            replacement.len() >= 2 && replacement.starts_with('\'') && replacement.ends_with('\'');
+        let opened = literal && line.get(..start).is_some_and(|s| s.ends_with('\''));
+        let closed = opened && line.get(end..).is_some_and(|s| s.starts_with('\''));
+        let mut text = replacement;
+        if opened {
+            text = text.strip_prefix('\'').unwrap_or(text);
+        }
+        if closed {
+            text = text.strip_suffix('\'').unwrap_or(text);
+        }
+        self.replace_current_word_with(text);
+        if closed {
+            self.cursor_col += 1;
+        }
+    }
+
     /// Compute the text that an operator (delete / yank / change) would
     /// cover when applied over `(motion, count)`. Returns the text
     /// without modifying the buffer.
@@ -1766,6 +1790,32 @@ mod tests {
         buf.delete_char();
         assert_eq!(buf.lines(), &["abcd"]);
         assert_eq!(buf.cursor(), (0, 2));
+    }
+
+    #[test]
+    fn replace_word_with_literal_merges_quotes() {
+        let cases = [
+            ("x = CO", 6, "x = 'CONTENT'", 13),
+            ("x = 'CO", 7, "x = 'CONTENT'", 13),
+            ("x = 'CO'", 7, "x = 'CONTENT'", 13),
+            ("x = 'ü", 7, "x = 'CONTENT'", 13),
+            ("x = ''", 5, "x = 'CONTENT'", 13),
+        ];
+        for (typed, col, expected, cursor) in cases {
+            let mut buf = EditorBuffer::new();
+            buf.insert_str(typed);
+            buf.set_cursor(0, col);
+            buf.replace_word_with_literal("'CONTENT'");
+            assert_eq!(buf.lines(), &[expected], "{typed}");
+            assert_eq!(buf.cursor(), (0, cursor), "{typed}");
+        }
+
+        let mut buf = EditorBuffer::new();
+        buf.insert_str("x = 'nu'");
+        buf.set_cursor(0, 7);
+        buf.replace_word_with_literal("NULL");
+        assert_eq!(buf.lines(), &["x = 'NULL'"]);
+        assert_eq!(buf.cursor(), (0, 9));
     }
 
     #[test]

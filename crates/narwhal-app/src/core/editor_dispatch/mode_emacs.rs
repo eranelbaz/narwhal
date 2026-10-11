@@ -119,10 +119,11 @@ impl AppCore {
                 let prefix = self.ui.tabs[self.ui.active_tab]
                     .editor
                     .current_word_prefix();
-                if prefix.is_empty() {
+                if prefix.is_empty() && !self.in_value_position() {
                     self.emacs_insert_str("    ");
                 } else {
                     self.trigger_completion().await;
+                    return;
                 }
             }
 

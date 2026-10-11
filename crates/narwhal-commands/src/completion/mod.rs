@@ -63,6 +63,7 @@ mod tests {
                 &listing(),
                 &CompletionContext::Generic,
                 &no_columns(),
+                &HashMap::new(),
                 20
             )
             .is_empty()
@@ -76,6 +77,7 @@ mod tests {
             &listing(),
             &CompletionContext::Generic,
             &no_columns(),
+            &HashMap::new(),
             20,
         );
         let ord = out
@@ -102,6 +104,7 @@ mod tests {
             &listing(),
             &CompletionContext::Generic,
             &no_columns(),
+            &HashMap::new(),
             20,
         );
         assert!(out.iter().any(|c| c.text == "SELECT"));
@@ -118,6 +121,7 @@ mod tests {
             &listings,
             &CompletionContext::Generic,
             &no_columns(),
+            &HashMap::new(),
             20,
         );
         let n = out.iter().filter(|c| c.text == "orders").count();
@@ -131,6 +135,7 @@ mod tests {
             &listing(),
             &CompletionContext::Generic,
             &no_columns(),
+            &HashMap::new(),
             3,
         );
         assert!(out.len() <= 3);
@@ -141,7 +146,7 @@ mod tests {
         let ctx = detect_context("SELECT * FROM u", 14);
         assert_eq!(ctx, CompletionContext::TableExpected);
 
-        let out = gather("u", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("u", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         // Should contain `users` table but NOT `UNION` or `UPDATE` keywords.
         assert!(
             out.iter()
@@ -188,13 +193,23 @@ mod tests {
             }
         );
 
-        let out = gather("", &listing(), &ctx, &cols, 50);
+        let out = gather("", &listing(), &ctx, &cols, &HashMap::new(), 50);
         // Right after `users.` every column is offered.
         assert_eq!(out.len(), cols["users"].1.len());
-        assert!(gather("", &listing(), &CompletionContext::Generic, &cols, 50).is_empty());
+        assert!(
+            gather(
+                "",
+                &listing(),
+                &CompletionContext::Generic,
+                &cols,
+                &HashMap::new(),
+                50
+            )
+            .is_empty()
+        );
 
         // With a prefix we get the matching columns.
-        let out = gather("n", &listing(), &ctx, &cols, 50);
+        let out = gather("n", &listing(), &ctx, &cols, &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "name" && c.kind == CompletionKind::Column)
@@ -214,7 +229,7 @@ mod tests {
         let ctx = detect_context("SELECT * FROM orders JOIN u", 27);
         assert_eq!(ctx, CompletionContext::TableExpected);
 
-        let out = gather("u", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("u", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "users" && c.kind == CompletionKind::Table)
@@ -230,7 +245,7 @@ mod tests {
         let ctx = detect_context("UPDATE u", 8);
         assert_eq!(ctx, CompletionContext::TableExpected);
 
-        let out = gather("u", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("u", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "users" && c.kind == CompletionKind::Table)
@@ -275,7 +290,7 @@ mod tests {
                 table: "users".into()
             }
         );
-        let out = gather("e", &listing(), &ctx, &user_cols(), 50);
+        let out = gather("e", &listing(), &ctx, &user_cols(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "email" && c.kind == CompletionKind::Column)
@@ -296,7 +311,7 @@ mod tests {
                 table: "users".into()
             }
         );
-        let out = gather("e", &listing(), &ctx, &user_cols(), 50);
+        let out = gather("e", &listing(), &ctx, &user_cols(), &HashMap::new(), 50);
         assert!(out.iter().any(|c| c.text == "email"));
 
         let buf = "SELECT x. FROM users u; SELECT * FROM orders x";
@@ -345,7 +360,7 @@ mod tests {
                 table: "orders".into()
             }
         );
-        let out = gather("t", &listing(), &ctx, &cols, 50);
+        let out = gather("t", &listing(), &ctx, &cols, &HashMap::new(), 50);
         assert!(out.iter().any(|c| c.text == "total"));
     }
 
@@ -363,7 +378,7 @@ mod tests {
                 schema: "public".into()
             }
         );
-        let out = gather("u", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("u", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "users" && c.kind == CompletionKind::Table)
@@ -390,7 +405,7 @@ mod tests {
     fn generic_context_includes_functions() {
         let ctx = detect_context("SELECT ", 7);
         assert_eq!(ctx, CompletionContext::Generic);
-        let out = gather("cou", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("cou", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "COUNT(" && c.kind == CompletionKind::Function)
@@ -402,10 +417,206 @@ mod tests {
     #[test]
     fn function_kind_distinct_from_keyword() {
         let ctx = detect_context("SELECT ", 7);
-        let out = gather("now", &listing(), &ctx, &no_columns(), 50);
+        let out = gather("now", &listing(), &ctx, &no_columns(), &HashMap::new(), 50);
         assert!(
             out.iter()
                 .any(|c| c.text == "NOW()" && c.kind == CompletionKind::Function)
         );
+    }
+
+    fn rec_value_ctx() -> CompletionContext {
+        CompletionContext::ValueExpected {
+            table: "recommendations".into(),
+            column: "type".into(),
+        }
+    }
+
+    #[test]
+    fn equals_after_qualified_column_expects_value() {
+        let buf = "select r.*\nfrom recommendations r\nwhere r.trackable = true\n  and r.type = ";
+        assert_eq!(detect_context(buf, buf.len()), rec_value_ctx());
+    }
+
+    #[test]
+    fn value_context_survives_partial_literal_prefix_and_comment() {
+        for buf in [
+            "select * from recommendations r where r.type = CO",
+            "select * from recommendations r where r.type = 'CO",
+            "select * from recommendations r where r.type = '",
+            "select * from recommendations r where r.type = /* pick */ ",
+        ] {
+            assert_eq!(detect_context(buf, buf.len()), rec_value_ctx(), "{buf}");
+        }
+    }
+
+    #[test]
+    fn keyword_named_column_still_expects_value() {
+        let buf = "select * from orders o where o.order = ";
+        assert_eq!(
+            detect_context(buf, buf.len()),
+            CompletionContext::ValueExpected {
+                table: "orders".into(),
+                column: "order".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn non_equality_positions_are_not_value_context() {
+        for buf in [
+            "select * from recommendations r where r.type = 'BLOG' ",
+            "select * from recommendations r where r.type != ",
+            "select * from recommendations r where r.type <= ",
+            "select * from recommendations r where r.type >= ",
+            "select * from recommendations r where r.type::text = ",
+            "select * from recommendations r where r.type = 'X' and r.",
+        ] {
+            assert!(
+                !matches!(
+                    detect_context(buf, buf.len()),
+                    CompletionContext::ValueExpected { .. }
+                ),
+                "{buf}"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_paired_quote_is_value_but_existing_literal_is_not() {
+        let paired = "select * from recommendations r where r.type = 'CO'";
+        assert_eq!(detect_context(paired, paired.len() - 1), rec_value_ctx());
+        let existing = "select * from recommendations r where r.type = 'BLOG'";
+        let at = existing.find('\'').unwrap();
+        assert!(!matches!(
+            detect_context(existing, at),
+            CompletionContext::ValueExpected { .. }
+        ));
+        assert!(!matches!(
+            detect_context(existing, at + 3),
+            CompletionContext::ValueExpected { .. }
+        ));
+    }
+
+    fn rec_cols() -> HashMap<String, (String, Vec<ColumnHeader>)> {
+        HashMap::from([(
+            "recommendations".to_owned(),
+            (
+                "public".to_owned(),
+                vec![
+                    ColumnHeader {
+                        name: "type".into(),
+                        data_type: "\"RecommendationType\"".into(),
+                    },
+                    ColumnHeader {
+                        name: "title".into(),
+                        data_type: "text".into(),
+                    },
+                ],
+            ),
+        )])
+    }
+
+    fn rec_enums() -> HashMap<String, Vec<String>> {
+        HashMap::from([(
+            "\"RecommendationType\"".to_owned(),
+            ["CONTENT", "BLOG", "TECHNICAL", "PR", "THIRD_PARTY"]
+                .map(String::from)
+                .to_vec(),
+        )])
+    }
+
+    fn value_ctx(column: &str) -> CompletionContext {
+        CompletionContext::ValueExpected {
+            table: "recommendations".into(),
+            column: column.into(),
+        }
+    }
+
+    fn texts(out: &[Completion]) -> Vec<&str> {
+        out.iter().map(|c| c.text.as_str()).collect()
+    }
+
+    #[test]
+    fn enum_column_suggests_quoted_labels_in_declared_order() {
+        let out = gather(
+            "",
+            &listing(),
+            &value_ctx("type"),
+            &rec_cols(),
+            &rec_enums(),
+            50,
+        );
+        assert_eq!(
+            texts(&out),
+            [
+                "'CONTENT'",
+                "'BLOG'",
+                "'TECHNICAL'",
+                "'PR'",
+                "'THIRD_PARTY'"
+            ]
+        );
+        assert!(out.iter().all(|c| c.kind == CompletionKind::Value));
+    }
+
+    #[test]
+    fn enum_labels_filter_by_prefix() {
+        let out = gather(
+            "th",
+            &listing(),
+            &value_ctx("type"),
+            &rec_cols(),
+            &rec_enums(),
+            50,
+        );
+        assert_eq!(texts(&out), ["'THIRD_PARTY'"]);
+    }
+
+    #[test]
+    fn unmatched_prefix_on_enum_column_falls_back_to_generic() {
+        let out = gather(
+            "nu",
+            &listing(),
+            &value_ctx("type"),
+            &rec_cols(),
+            &rec_enums(),
+            50,
+        );
+        assert!(out.iter().any(|c| c.text.eq_ignore_ascii_case("NULL")));
+        assert!(!out.iter().any(|c| c.kind == CompletionKind::Value));
+    }
+
+    #[test]
+    fn non_enum_column_suggests_no_labels_but_keeps_generic() {
+        for column in ["title", "missing"] {
+            assert!(
+                gather(
+                    "",
+                    &listing(),
+                    &value_ctx(column),
+                    &rec_cols(),
+                    &rec_enums(),
+                    50
+                )
+                .is_empty()
+            );
+        }
+        let out = gather(
+            "no",
+            &listing(),
+            &value_ctx("title"),
+            &rec_cols(),
+            &rec_enums(),
+            50,
+        );
+        assert!(out.iter().any(|c| c.kind == CompletionKind::Function));
+        assert!(!out.iter().any(|c| c.kind == CompletionKind::Value));
+    }
+
+    #[test]
+    fn enum_label_quotes_are_escaped() {
+        let enums = HashMap::from([("\"RecommendationType\"".to_owned(), vec!["it's".to_owned()])]);
+        let out = gather("", &listing(), &value_ctx("type"), &rec_cols(), &enums, 50);
+        assert_eq!(texts(&out), ["'it''s'"]);
     }
 }

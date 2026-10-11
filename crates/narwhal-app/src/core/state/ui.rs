@@ -148,6 +148,8 @@ pub struct UiState {
     /// Set when background column metadata lands so the host re-runs
     /// auto-complete against the new cache.
     pub completion_refresh_pending: bool,
+    /// Tab hit while value metadata was loading (tab id, cursor row, col); refresh re-runs the manual trigger.
+    pub completion_manual_pending: Option<(u64, usize, usize)>,
     /// In-flight mouse drag inside the editor pane. `Some` between
     /// a `Down(Left)` and the matching `Up(Left)` (or focus loss).
     pub mouse_drag: Option<MouseDragState>,
@@ -190,6 +192,7 @@ impl UiState {
             show_mode_indicator: true,
             emacs_pending_prefix: None,
             completion_refresh_pending: false,
+            completion_manual_pending: None,
             mouse_drag: None,
             last_click: None,
             context_menu: None,

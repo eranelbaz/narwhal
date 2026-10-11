@@ -240,6 +240,17 @@ pub enum MetaUpdate {
         /// Columns on success, error text otherwise.
         result: Result<Vec<ColumnHeader>, String>,
     },
+    /// Background enum-label fetch for value completion.
+    EnumValuesFetched {
+        /// `ConnectionConfig.id` of the session that asked.
+        session_id: Uuid,
+        /// `Session::enum_generation` when the fetch started.
+        generation: u64,
+        /// Key into `Session::enum_cache`.
+        type_name: String,
+        /// Labels on success, error text otherwise.
+        result: Result<Vec<String>, String>,
+    },
 }
 
 /// Spawn a background task that performs the requested metadata operation

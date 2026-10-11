@@ -220,3 +220,94 @@ async fn empty_prefix_inserts_four_spaces() {
     let text = core.editor().entire_text();
     assert_eq!(text, "    ");
 }
+
+async fn basic_value_core() -> AppCore {
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("v.db");
+    rusqlite::Connection::open(&db_path)
+        .unwrap()
+        .execute("CREATE TABLE recs (kind TEXT, title INTEGER)", [])
+        .unwrap();
+    Box::leak(Box::new(dir));
+    let connections = ConnectionsFile {
+        schema_version: None,
+        logical_relations: Vec::new(),
+        connections: vec![ConnectionConfig {
+            id: Uuid::nil(),
+            name: "v".into(),
+            driver: "sqlite".into(),
+            params: ConnectionParams::with(|p| {
+                p.path = Some(db_path.to_string_lossy().into_owned());
+            }),
+        }],
+    };
+    let mut core = AppCore::new(DriverRegistry::with_defaults(), connections, None);
+    let mut settings = narwhal_config::Settings::default();
+    settings.editor.mode = narwhal_config::EditorMode::Basic;
+    core.apply_settings(settings);
+    core.execute_command("open v").await;
+    core.drain_meta_updates().await;
+    core
+}
+
+async fn seed_enum(core: &mut AppCore, type_name: &str, labels: &[&str]) {
+    // Warm the column cache via a value-position Tab, then inject labels.
+    core.editor_paste("select * from recs r where r.kind = ")
+        .await;
+    core.handle_key(key(KeyCode::Tab)).await;
+    core.drain_meta_updates().await;
+    core.drain_meta_updates().await;
+    core.handle_meta_update(narwhal_app::meta::MetaUpdate::EnumValuesFetched {
+        session_id: Uuid::nil(),
+        generation: core.enum_generation(),
+        type_name: type_name.into(),
+        result: Ok(labels.iter().map(|&l| l.into()).collect()),
+    });
+    core.tabs_mut()[0].editor_mut().clear();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn value_position_tab_lists_enum_labels() {
+    let mut core = basic_value_core().await;
+    seed_enum(&mut core, "TEXT", &["A", "B"]).await;
+    core.editor_paste("select * from recs r where r.kind = ")
+        .await;
+    core.handle_key(key(KeyCode::Tab)).await;
+    let popup = core.editor_completion().expect("popup open");
+    let texts: Vec<&str> = popup.items.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, ["'A'", "'B'"]);
+    assert!(
+        popup
+            .items
+            .iter()
+            .all(|c| c.kind == narwhal_app::completion::CompletionKind::Value)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn value_position_tab_on_non_enum_indents() {
+    let mut core = basic_value_core().await;
+    seed_enum(&mut core, "INTEGER", &[]).await;
+    core.editor_paste("select * from recs r where r.title = ")
+        .await;
+    core.handle_key(key(KeyCode::Tab)).await;
+    assert!(!core.editor_completion_is_open().await);
+    assert_eq!(
+        core.editor().entire_text(),
+        "select * from recs r where r.title =     "
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pending_value_tab_does_not_fire_in_other_tab() {
+    let mut core = basic_value_core().await;
+    core.editor_paste("select * from recs r where r.kind = ")
+        .await;
+    core.handle_key(key(KeyCode::Tab)).await;
+    core.handle_key(ctrl_key(KeyCode::Char('t'))).await;
+    core.drain_meta_updates().await;
+    core.apply_completion_refresh().await;
+    core.drain_meta_updates().await;
+    core.apply_completion_refresh().await;
+    assert_eq!(core.editor().entire_text(), "");
+}

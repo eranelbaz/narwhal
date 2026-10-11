@@ -6,8 +6,8 @@ use narwhal_tui::Pane;
 use narwhal_vim::Mode;
 
 use super::{
-    AppCore, HistoryState, JsonViewerState, ResultState, RowDetailState, SidebarItem,
-    SnippetsModal, StatusBar, Tab,
+    AppCore, CompletionState, HistoryState, JsonViewerState, ResultState, RowDetailState,
+    SidebarItem, SnippetsModal, StatusBar, Tab,
 };
 use crate::session::Session;
 use crate::snippets::SnippetStore;
@@ -43,6 +43,22 @@ impl AppCore {
     #[doc(hidden)]
     pub async fn editor_completion_is_open(&self) -> bool {
         self.ui.tabs[self.ui.active_tab].completion.is_some()
+    }
+
+    /// Test helper: the active tab's completion popup, if open.
+    #[doc(hidden)]
+    pub fn editor_completion(&self) -> Option<&CompletionState> {
+        self.ui.tabs[self.ui.active_tab].completion.as_ref()
+    }
+
+    /// Test helper: the active session's enum-cache generation, so tests
+    /// can inject a matching `EnumValuesFetched`. 0 with no session.
+    #[doc(hidden)]
+    pub fn enum_generation(&self) -> u64 {
+        self.session
+            .active
+            .as_ref()
+            .map_or(0, |s| s.enum_generation)
     }
 
     /// Test helper: borrow the JSON viewer modal state, if open. Lives

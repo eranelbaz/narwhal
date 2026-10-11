@@ -45,6 +45,14 @@ pub struct Session {
     /// Table keys with a completion-driven describe in flight, so
     /// repeated keystrokes don't spawn duplicate fetches.
     pub columns_in_flight: HashSet<String>,
+    /// Enum labels keyed by `ColumnHeader::data_type`; empty = not an enum.
+    pub enum_cache: HashMap<String, Vec<String>>,
+    /// Type names with an enum-label fetch in flight.
+    pub enums_in_flight: HashSet<String>,
+    /// Bumped on schema refresh so stale enum replies are dropped.
+    pub enum_generation: u64,
+    /// Last failed fetch per type; retried only after a backoff.
+    pub enum_failed_at: HashMap<String, std::time::Instant>,
     /// m-2: full-fat [`TableSchema`] cache. Keys are `(schema,
     /// table)`; values are the entire driver introspection result
     /// (columns + indexes + foreign keys + unique constraints +
@@ -198,6 +206,10 @@ impl Session {
             transaction: None,
             column_cache: HashMap::new(),
             columns_in_flight: HashSet::new(),
+            enum_cache: HashMap::new(),
+            enums_in_flight: HashSet::new(),
+            enum_generation: 0,
+            enum_failed_at: HashMap::new(),
             table_schema_cache: HashMap::new(),
             schemas_version: 0,
             _ssh_tunnel: tunnel,

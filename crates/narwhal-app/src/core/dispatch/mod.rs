@@ -95,6 +95,7 @@ impl AppCore {
                             CompletionKind::Table => "T",
                             CompletionKind::Column => "C",
                             CompletionKind::Function => "ƒ",
+                            CompletionKind::Value => "V",
                         },
                         detail: c.detail.as_deref(),
                     })
@@ -655,6 +656,7 @@ impl AppCore {
     pub async fn handle_mouse(&mut self, event: crossterm::event::MouseEvent) {
         use crossterm::event::{MouseButton, MouseEventKind};
 
+        self.ui.completion_manual_pending = None;
         // CB-1: when a keyboard-owning modal (anything except the
         // context menu) is open, mouse clicks must not mutate
         // background pane state. Left-clicks that land outside an

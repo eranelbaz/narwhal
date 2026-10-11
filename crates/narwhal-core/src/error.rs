@@ -26,7 +26,7 @@ pub enum Error {
     #[error("connection failed: {0}")]
     Connection(String),
 
-    #[error("connection failed: {msg}")]
+    #[error("connection failed: {msg}: {source}")]
     ConnectionWithSource {
         msg: String,
         #[source]
@@ -39,7 +39,7 @@ pub enum Error {
     #[error("query failed: {0}")]
     Query(String),
 
-    #[error("query failed: {msg}")]
+    #[error("query failed: {msg}: {source}")]
     QueryWithSource {
         msg: String,
         #[source]
@@ -61,7 +61,7 @@ pub enum Error {
     #[error("configuration error: {0}")]
     Config(String),
 
-    #[error("configuration error: {msg}")]
+    #[error("configuration error: {msg}: {source}")]
     ConfigWithSource {
         msg: String,
         #[source]
@@ -143,7 +143,10 @@ mod tests {
         let driver = FakeDriverError(42);
         let err = Error::connection_with("failed to handshake", driver);
         assert!(matches!(err, Error::ConnectionWithSource { .. }));
-        assert_eq!(err.to_string(), "connection failed: failed to handshake");
+        assert_eq!(
+            err.to_string(),
+            "connection failed: failed to handshake: driver-specific boom: code=42"
+        );
         let found = err.find_source::<FakeDriverError>().expect("chain");
         assert_eq!(found.0, 42);
     }

@@ -245,6 +245,14 @@ fn map_pg_error(error: tokio_postgres::Error) -> Error {
         if db.code() == &SqlState::QUERY_CANCELED {
             return Error::Cancelled;
         }
+        let mut msg = db.to_string();
+        if let Some(detail) = db.detail() {
+            msg.push_str(&format!(" ({detail})"));
+        }
+        if let Some(hint) = db.hint() {
+            msg.push_str(&format!(" [hint: {hint}]"));
+        }
+        return Error::query_with(msg, error);
     }
     Error::query_with("tokio-postgres query failed", error)
 }

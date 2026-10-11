@@ -192,6 +192,10 @@ pub struct RunSettings {
     /// queries. `0` disables the time-based flush and reverts to
     /// pure size-based batching. Default `50`.
     pub stream_flush_ms: u64,
+    /// Row cap for interactive `SELECT`s. Extra rows are not fetched,
+    /// so a huge table cannot stall the UI. `0` disables the cap.
+    /// Default `1000`.
+    pub max_rows: usize,
 }
 
 impl Default for RunSettings {
@@ -199,6 +203,7 @@ impl Default for RunSettings {
         Self {
             batch_size: 64,
             stream_flush_ms: 50,
+            max_rows: 1000,
         }
     }
 }

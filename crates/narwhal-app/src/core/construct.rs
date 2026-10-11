@@ -215,8 +215,11 @@ impl AppCore {
         self.ui.diagram_icons = settings.diagram.icons;
         // streaming-result tuning. Defended in StreamTuning::new
         // so a misconfigured `batch_size = 0` cannot livelock the worker.
-        self.session.stream_tuning =
-            crate::run::StreamTuning::new(settings.run.batch_size, settings.run.stream_flush_ms);
+        self.session.stream_tuning = crate::run::StreamTuning::new(
+            settings.run.batch_size,
+            settings.run.stream_flush_ms,
+            settings.run.max_rows,
+        );
         self.ui.theme = match settings.theme {
             narwhal_config::Theme::Dark => Theme::DARK,
             narwhal_config::Theme::Light => Theme::LIGHT,

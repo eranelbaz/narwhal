@@ -27,6 +27,7 @@ preset = "default"    # default | vscode | datagrip | intellij
 [run]
 batch_size = 64
 flush_window_ms = 50
+max_rows = 1000       # cap on SELECT results; 0 = unlimited
 ```
 
 Open the in-app editor with `:settings` — changes save atomically

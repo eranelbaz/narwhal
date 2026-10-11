@@ -21,6 +21,8 @@ pub struct StreamTuning {
     /// Time window (ms) before a partially-filled batch is flushed.
     /// `0` disables the time-based flush.
     pub flush_ms: u64,
+    /// Row cap for row-returning statements; `0` means unlimited.
+    pub max_rows: usize,
 }
 
 impl Default for StreamTuning {
@@ -29,6 +31,7 @@ impl Default for StreamTuning {
         Self {
             batch_size: 64,
             flush_ms: 50,
+            max_rows: 1000,
         }
     }
 }
@@ -37,11 +40,12 @@ impl StreamTuning {
     /// Build a tuning struct, defending against the pathological
     /// `batch_size = 0` config (would loop forever).
     #[must_use]
-    pub const fn new(batch_size: usize, flush_ms: u64) -> Self {
+    pub const fn new(batch_size: usize, flush_ms: u64, max_rows: usize) -> Self {
         let batch_size = if batch_size == 0 { 1 } else { batch_size };
         Self {
             batch_size,
             flush_ms,
+            max_rows,
         }
     }
 }
@@ -61,6 +65,30 @@ pub fn is_ddl_statement(sql: &str) -> bool {
         head.as_str(),
         "CREATE" | "DROP" | "ALTER" | "TRUNCATE" | "RENAME"
     )
+}
+
+/// Whether `sql` is a read query whose result set should be streamed
+/// and capped rather than materialised whole.
+fn returns_rows(sql: &str) -> bool {
+    let body =
+        strip_leading_comments(sql).trim_start_matches(|c: char| c == '(' || c.is_whitespace());
+    let head = body
+        .split(|c: char| c.is_whitespace() || c == '(')
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
+    match head.as_str() {
+        "SELECT" | "TABLE" | "VALUES" | "SHOW" => true,
+        // Data-modifying CTEs must keep `rows_affected` semantics.
+        "WITH" => !body
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| {
+                ["INSERT", "UPDATE", "DELETE", "MERGE"]
+                    .iter()
+                    .any(|k| w.eq_ignore_ascii_case(k))
+            }),
+        _ => false,
+    }
 }
 
 /// Trim leading whitespace and SQL comments from `sql`. Stops as soon
@@ -210,6 +238,8 @@ pub enum RunUpdate {
         rows_returned: usize,
         rows_affected: Option<u64>,
         streamed: bool,
+        /// The result hit [`StreamTuning::max_rows`] and was cut short.
+        truncated: bool,
     },
     /// The current statement failed; the batch is aborted.
     /// `cancelled` is `true` when the failure was caused by a user-initiated
@@ -319,13 +349,41 @@ pub fn spawn_run(
 
             let params = request.params_for(i);
             let outcome = match request.mode {
-                RunMode::Execute => run_execute(holder.conn(), sql, params, &tx).await,
-                RunMode::Stream => {
-                    run_stream(holder.conn(), sql, params, ctx.stream_tuning, &tx).await
+                RunMode::Execute if !returns_rows(sql) => {
+                    run_execute(holder.conn(), sql, params, &tx).await
+                }
+                RunMode::Execute | RunMode::Stream => {
+                    // Cancelling inside a pinned transaction would abort it.
+                    let cancel_on_cap = matches!(ctx.target, RunTarget::Pool(_));
+                    let streamed = request.mode == RunMode::Stream;
+                    run_stream(
+                        holder.conn(),
+                        sql,
+                        params,
+                        ctx.stream_tuning,
+                        cancel_on_cap,
+                        streamed,
+                        &tx,
+                    )
+                    .await
                 }
             };
 
             *cancel_slot.lock().await = None;
+
+            // The cap-cancel may land late on the server; never reuse this
+            // connection.
+            if matches!(
+                outcome,
+                StatementOutcome::Ok {
+                    truncated: true,
+                    ..
+                }
+            ) {
+                if let Holder::Owned(c) = &mut holder {
+                    c.invalidate();
+                }
+            }
 
             record_history(&ctx, sql, &outcome).await;
             emit_audit_query(&ctx, sql, &outcome).await;
@@ -360,6 +418,7 @@ enum StatementOutcome {
         elapsed_ms: u64,
         rows_returned: usize,
         rows_affected: Option<u64>,
+        truncated: bool,
     },
     Err {
         error: narwhal_core::Error,
@@ -406,12 +465,14 @@ async fn run_execute(
                     rows_returned,
                     rows_affected: qr.rows_affected,
                     streamed: false,
+                    truncated: false,
                 })
                 .await;
             StatementOutcome::Ok {
                 elapsed_ms,
                 rows_returned,
                 rows_affected: qr.rows_affected,
+                truncated: false,
             }
         }
         Err(error) => {
@@ -434,9 +495,16 @@ async fn run_stream(
     sql: &str,
     params: &[Value],
     tuning: StreamTuning,
+    cancel_on_cap: bool,
+    streamed: bool,
     tx: &mpsc::Sender<RunUpdate>,
 ) -> StatementOutcome {
     let started = Instant::now();
+    let cancel = if cancel_on_cap {
+        conn.cancel_handle()
+    } else {
+        None
+    };
     let mut stream = match conn.query(sql, params).await {
         Ok(s) => s,
         Err(error) => {
@@ -478,8 +546,18 @@ async fn run_stream(
     // could bypass that — keep a local floor so the worker is
     // bullet-proof regardless.
     let batch_size = tuning.batch_size.max(1);
+    let max_rows = if tuning.max_rows == 0 {
+        usize::MAX
+    } else {
+        tuning.max_rows
+    };
+    let mut truncated = false;
 
     loop {
+        if stream.rows_yielded() >= max_rows {
+            truncated = !matches!(stream.next_row().await, None | Some(Err(_)));
+            break;
+        }
         // Drive the next row with an optional time-based deadline so
         // a partial batch can flush even when the driver is idle.
         //
@@ -570,7 +648,14 @@ async fn run_stream(
     // (review fixup M4). Avoids the previous `total_rows` shadow
     // counter that could drift if the loop body ever grew a
     // "skip this row" branch.
-    let total_rows = stream.rows_yielded();
+    let total_rows = stream.rows_yielded().min(max_rows);
+    if truncated {
+        if let Some(cancel) = cancel {
+            if let Err(error) = cancel.cancel().await {
+                warn!(target: "narwhal::run", error = %error, "cancel after row cap failed");
+            }
+        }
+    }
     if let Err(error) = stream.close().await {
         warn!(target: "narwhal::run", error = %error, "stream close failed");
     }
@@ -591,13 +676,15 @@ async fn run_stream(
                 elapsed_ms,
                 rows_returned: total_rows,
                 rows_affected: None,
-                streamed: true,
+                streamed,
+                truncated,
             })
             .await;
         StatementOutcome::Ok {
             elapsed_ms,
             rows_returned: total_rows,
             rows_affected: None,
+            truncated,
         }
     }
 }
@@ -614,6 +701,7 @@ async fn record_history(ctx: &RunContext, sql: &str, outcome: &StatementOutcome)
             elapsed_ms,
             rows_returned,
             rows_affected,
+            ..
         } => {
             entry = entry.with_timing(*elapsed_ms);
             if let Some(a) = rows_affected {
@@ -654,6 +742,7 @@ async fn emit_audit_query(ctx: &RunContext, sql: &str, outcome: &StatementOutcom
             elapsed_ms,
             rows_returned,
             rows_affected,
+            ..
         } => AuditEvent::Query {
             session_id: ctx.audit_session_id,
             sql: sql.to_owned(),
@@ -678,20 +767,20 @@ async fn emit_audit_query(ctx: &RunContext, sql: &str, outcome: &StatementOutcom
 
 #[cfg(test)]
 mod tests {
-    use super::{StreamTuning, is_ddl_statement};
+    use super::{StreamTuning, is_ddl_statement, returns_rows};
 
     /// `StreamTuning::new` must not let `batch_size = 0`
     /// escape — a zero-sized batch would livelock the worker loop.
     #[test]
     fn stream_tuning_zero_batch_clamped_to_one() {
-        let t = StreamTuning::new(0, 50);
+        let t = StreamTuning::new(0, 50, 1000);
         assert_eq!(t.batch_size, 1);
         assert_eq!(t.flush_ms, 50);
     }
 
     #[test]
     fn stream_tuning_passthrough_when_positive() {
-        let t = StreamTuning::new(128, 25);
+        let t = StreamTuning::new(128, 25, 1000);
         assert_eq!(t.batch_size, 128);
         assert_eq!(t.flush_ms, 25);
     }
@@ -701,6 +790,20 @@ mod tests {
         let t = StreamTuning::default();
         assert_eq!(t.batch_size, 64);
         assert_eq!(t.flush_ms, 50);
+        assert_eq!(t.max_rows, 1000);
+    }
+
+    #[test]
+    fn returns_rows_classifier() {
+        assert!(returns_rows("SELECT * FROM t"));
+        assert!(returns_rows("-- c\n select 1"));
+        assert!(!returns_rows("INSERT INTO t SELECT * FROM u"));
+        assert!(!returns_rows(
+            "WITH d AS (DELETE FROM t RETURNING *) SELECT 1"
+        ));
+        assert!(!returns_rows("EXPLAIN SELECT 1"));
+        assert!(returns_rows("(SELECT 1) UNION (SELECT 2)"));
+        assert!(returns_rows("WITH d AS (SELECT 1) SELECT * FROM d"));
     }
 
     #[test]

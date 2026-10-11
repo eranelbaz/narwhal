@@ -249,6 +249,8 @@ impl AppCore {
     }
 
     pub(crate) async fn set_page_size(&mut self, size: usize) {
+        let cap = self.session.stream_tuning.max_rows;
+        let size = if cap == 0 { size } else { size.min(cap) };
         self.ui.tabs[self.ui.active_tab].page_size = size;
         self.ui.status.message = format!("page size set to {size}");
     }

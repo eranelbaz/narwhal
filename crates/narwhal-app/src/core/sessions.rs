@@ -444,6 +444,7 @@ impl AppCore {
             RunRequest::with_params(statements.into_iter().zip(params).collect(), mode)
         };
         self.process.running = true;
+        self.process.truncated = false;
         self.process.run_tab = Some(self.ui.active_tab);
         self.ui.pending_result_entries_states.clear();
         self.ui.pending_result_entries_views.clear();

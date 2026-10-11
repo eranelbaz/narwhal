@@ -52,6 +52,8 @@ pub struct ProcessState {
     /// message does not silently overwrite it. Cleared after it
     /// bubbles up to the status bar.
     pub plugin_warning: Option<String>,
+    /// A statement in the current batch hit `settings.run.max_rows`.
+    pub truncated: bool,
     /// Abort handle for the in-flight debounced schema-refresh
     /// task. Replaced on every `schedule_schema_refresh` call so
     /// the new timer cancels the old one.
@@ -89,6 +91,7 @@ impl ProcessState {
             run_tab: None,
             cancel_slot,
             plugin_warning: None,
+            truncated: false,
             refresh_task: None,
             refresh_pending: Arc::new(AtomicBool::new(false)),
             run_tx,

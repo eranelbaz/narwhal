@@ -129,9 +129,11 @@ impl AppCore {
                 rows_returned,
                 rows_affected,
                 streamed,
+                truncated,
             } => {
                 self.finalize_statement(elapsed_ms, rows_returned, rows_affected, streamed)
                     .await;
+                self.process.truncated |= truncated;
             }
             RunUpdate::Failed {
                 error,
@@ -204,11 +206,14 @@ impl AppCore {
                     bundle
                 };
 
-                let base = if failures == 0 {
+                let mut base = if failures == 0 {
                     format!("done · {successes} statement(s)")
                 } else {
                     format!("done · {successes} ok · {failures} failed")
                 };
+                if std::mem::take(&mut self.process.truncated) {
+                    base.push_str(" · truncated (settings.run.max_rows; add LIMIT/OFFSET to page)");
+                }
                 self.ui.status.message = match self.process.plugin_warning.take() {
                     Some(warning) => format!("{base} · {warning}"),
                     None => base,

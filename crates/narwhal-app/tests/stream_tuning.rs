@@ -277,3 +277,47 @@ async fn query_path_matches_stream_path() {
         render_row(executed_rows.last().unwrap())
     );
 }
+
+/// `max_rows` caps `:run` SELECTs so a huge table cannot stall the UI.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn max_rows_caps_run_select() {
+    let dir = build_db(500);
+    let db_path = dir.path().join("test.db");
+
+    let (registry, connections) = fixture(db_path);
+    let mut core = AppCore::new(registry, connections, None);
+    let mut settings = Settings::default();
+    settings.run.max_rows = 100;
+    core.apply_settings(settings);
+    core.execute_command("open headless").await;
+
+    core.insert_into_editor("SELECT * FROM bulk").await;
+    core.execute_command("run").await;
+    core.drain_run_updates().await;
+
+    match core.result() {
+        ResultState::Rows { rows, .. } => assert_eq!(rows.len(), 100),
+        other => panic!("expected Rows, got {other:?}"),
+    }
+    assert!(core.status_message().contains("truncated"));
+}
+
+/// A result of exactly `max_rows` rows is complete, not truncated.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn max_rows_exact_fit_is_not_truncated() {
+    let dir = build_db(100);
+    let db_path = dir.path().join("test.db");
+
+    let (registry, connections) = fixture(db_path);
+    let mut core = AppCore::new(registry, connections, None);
+    let mut settings = Settings::default();
+    settings.run.max_rows = 100;
+    core.apply_settings(settings);
+    core.execute_command("open headless").await;
+
+    core.insert_into_editor("SELECT * FROM bulk").await;
+    core.execute_command("run").await;
+    core.drain_run_updates().await;
+
+    assert!(!core.status_message().contains("truncated"));
+}

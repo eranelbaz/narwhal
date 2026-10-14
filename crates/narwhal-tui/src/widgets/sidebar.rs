@@ -23,6 +23,7 @@ pub use narwhal_domain::SchemaListing;
 pub enum SidebarRowKind {
     Connection,
     ActiveConnection,
+    DisabledConnection,
     Schema,
     Table,
     View,
@@ -35,6 +36,7 @@ impl SidebarRowKind {
         match self {
             Self::Connection => "○",
             Self::ActiveConnection => "●",
+            Self::DisabledConnection => "⊘",
             Self::Schema => "▾",
             Self::Table => "▢",
             Self::View => "▤",
@@ -154,6 +156,9 @@ pub fn render_sidebar(
                 }
                 SidebarRowKind::Schema => {
                     style = style.fg(theme.muted);
+                }
+                SidebarRowKind::DisabledConnection => {
+                    style = style.fg(theme.muted).add_modifier(Modifier::DIM);
                 }
                 _ => {}
             }

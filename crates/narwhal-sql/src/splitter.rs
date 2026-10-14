@@ -92,7 +92,7 @@ impl<'a> Splitter<'a> {
     /// backslash escapes. `MySQL` applies them unconditionally to single-quoted
     /// strings; `PostgreSQL` only inside `E'...'` (`e'...'`) where the prefix
     /// stands as its own token.
-    fn opening_uses_backslash_escape(&self) -> bool {
+    const fn opening_uses_backslash_escape(&self) -> bool {
         match self.dialect {
             Dialect::MySql => true,
             Dialect::Postgres => self.postgres_e_prefix_at_open(),
@@ -104,7 +104,7 @@ impl<'a> Splitter<'a> {
     /// that is itself preceded by a non-identifier byte (or start of input),
     /// i.e. the `E` is the entire previous token rather than the tail of
     /// some identifier like `name`.
-    fn postgres_e_prefix_at_open(&self) -> bool {
+    const fn postgres_e_prefix_at_open(&self) -> bool {
         if self.pos == 0 {
             return false;
         }

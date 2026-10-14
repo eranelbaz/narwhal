@@ -12,6 +12,7 @@ use super::state::{Built, ConnectionWizard, DRIVERS};
 impl ConnectionWizard {
     pub fn new() -> Self {
         let mut w = Self {
+            drivers: DRIVERS.to_vec(),
             driver_index: 0,
             fields: Vec::new(),
             focused: 0,
@@ -39,6 +40,7 @@ impl ConnectionWizard {
             .position(|d| *d == config.driver)
             .unwrap_or(0);
         let mut w = Self {
+            drivers: DRIVERS.to_vec(),
             driver_index,
             fields: Vec::new(),
             focused: 0,
@@ -127,11 +129,30 @@ impl ConnectionWizard {
     }
 
     pub fn driver(&self) -> &'static str {
-        DRIVERS[self.driver_index]
+        self.drivers[self.driver_index]
+    }
+
+    /// Narrow the selector to drivers passing `keep`. No-op when
+    /// nothing would be left. When editing, the connection's own
+    /// driver stays so its prefilled fields survive.
+    pub fn retain_drivers(&mut self, keep: impl Fn(&str) -> bool) {
+        let current = self.driver();
+        let editing = self.existing_id.is_some();
+        let keep = |d: &str| keep(d) || (editing && d == current);
+        if !self.drivers.iter().any(|d| keep(d)) {
+            return;
+        }
+        self.drivers.retain(|d| keep(d));
+        if let Some(idx) = self.drivers.iter().position(|d| *d == current) {
+            self.driver_index = idx;
+        } else {
+            self.driver_index = 0;
+            self.rebuild_fields();
+        }
     }
 
     pub fn cycle_driver(&mut self, delta: i32) {
-        let len = DRIVERS.len() as i32;
+        let len = self.drivers.len() as i32;
         self.driver_index = (((self.driver_index as i32) + delta).rem_euclid(len)) as usize;
         self.rebuild_fields();
     }
@@ -232,6 +253,9 @@ impl ConnectionWizard {
             }
             "clickhouse" => {
                 fields.extend(server_fields("8123"));
+            }
+            "mssql" => {
+                fields.extend(server_fields("1433"));
             }
             _ => {}
         }

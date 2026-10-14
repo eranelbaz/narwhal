@@ -66,9 +66,14 @@ impl AppCore {
         config: ConnectionConfig,
         password: Option<String>,
     ) {
-        let Ok(driver) = self.deps.registry.get(&config.driver) else {
-            self.ui.status.message = format!("driver not registered: {}", config.driver);
-            return;
+        let driver = match self.deps.registry.get(&config.driver) {
+            Ok(driver) => driver,
+            Err(error) => {
+                self.ui.status.message =
+                    narwhal_drivers::unavailable_hint(&self.deps.registry, &config.driver)
+                        .unwrap_or_else(|| error.to_string());
+                return;
+            }
         };
         let label = config.name.clone();
         let config_id = config.id;
@@ -476,8 +481,14 @@ impl AppCore {
         );
     }
 
-    pub(super) async fn start_wizard(&mut self) {
-        self.modals.wizard = Some(ConnectionWizard::new());
+    fn open_wizard(&mut self, mut wizard: ConnectionWizard) {
+        let registry = &self.deps.registry;
+        wizard.retain_drivers(|d| registry.contains(d));
+        self.modals.wizard = Some(wizard);
+    }
+
+    pub(crate) async fn start_wizard(&mut self) {
+        self.open_wizard(ConnectionWizard::new());
         self.modals.wizard_error = None;
         self.ui.status.message = "add: Tab moves · ←/→ driver · Enter saves · Esc cancels".into();
     }
@@ -506,7 +517,7 @@ impl AppCore {
         let password = parsed
             .password
             .map(|p| secrecy::SecretString::new(p.into_boxed_str()));
-        self.modals.wizard = Some(ConnectionWizard::from_config(&config, password, None));
+        self.open_wizard(ConnectionWizard::from_config(&config, password, None));
         self.modals.wizard_error = None;
         self.ui.status.message =
             "url: review fields · Tab moves · Enter saves · Esc cancels".into();
@@ -538,10 +549,15 @@ impl AppCore {
         let existing_id = Some(config.id);
         // Open the wizard with no password populated yet; the secret
         // is delivered on the meta channel below.
-        self.modals.wizard = Some(ConnectionWizard::from_config(&config, None, existing_id));
+        self.open_wizard(ConnectionWizard::from_config(&config, None, existing_id));
         self.modals.wizard_error = None;
         self.ui.status.message =
-            format!("edit '{name}': Tab moves · ←/→ driver · Enter saves · Esc cancels");
+            match narwhal_drivers::unavailable_hint(&self.deps.registry, &config.driver) {
+                Some(hint) => format!("edit '{name}': {hint}"),
+                None => {
+                    format!("edit '{name}': Tab moves · ←/→ driver · Enter saves · Esc cancels")
+                }
+            };
         // Spawn the keyring lookup and ship the result through the
         // meta channel. The handler in `handle_meta_update` injects
         // the secret only if the wizard is *still* open against the
@@ -650,9 +666,14 @@ impl AppCore {
             (config, None)
         };
 
-        let Ok(driver) = self.deps.registry.get(&config.driver) else {
-            self.ui.status.message = format!("test: driver not registered: {}", config.driver);
-            return;
+        let driver = match self.deps.registry.get(&config.driver) {
+            Ok(driver) => driver,
+            Err(error) => {
+                let reason = narwhal_drivers::unavailable_hint(&self.deps.registry, &config.driver)
+                    .unwrap_or_else(|| error.to_string());
+                self.ui.status.message = format!("test: {reason}");
+                return;
+            }
         };
         let driver = driver.clone();
         let label = if config.name.is_empty() {

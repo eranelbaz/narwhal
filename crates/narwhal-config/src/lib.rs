@@ -42,9 +42,10 @@ pub use migrate::{
 };
 pub use settings::{
     CURRENT_SCHEMA_VERSION, ConfigError, ConnectionsFile, DiagramIcons, DiagramSettings,
-    EditorMode, EditorSettings, HashicorpVaultSettings, KeyPreset, KeybindingSettings,
-    LogicalRelationConfig, LspSettings, MouseSelectionMode, OnePasswordVaultSettings,
-    PluginSettings, RunSettings, Settings, Theme, VaultProvider, VaultProviderSettings,
-    VaultSettings, WasmPluginSettings, WorkspacePersistSettings, WorkspaceSettings,
+    DriverSettings, EditorMode, EditorSettings, HashicorpVaultSettings, KeyPreset,
+    KeybindingSettings, LogicalRelationConfig, LspSettings, MouseSelectionMode,
+    OnePasswordVaultSettings, PluginSettings, RunSettings, Settings, Theme, VaultProvider,
+    VaultProviderSettings, VaultSettings, WasmPluginSettings, WorkspacePersistSettings,
+    WorkspaceSettings,
 };
 pub use url::{ParsedUrl, UrlError, parse as parse_url};

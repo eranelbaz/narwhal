@@ -165,4 +165,19 @@ mod tests {
         w.pop_char();
         assert_eq!(w.fields[pw_idx].value.expose(), "ab");
     }
+
+    #[test]
+    fn retain_drivers_narrows_selector() {
+        let mut w = ConnectionWizard::new();
+        w.retain_drivers(|d| d == "postgres" || d == "clickhouse");
+        assert_eq!(w.drivers, ["postgres", "clickhouse"]);
+        assert_eq!(w.driver(), "postgres");
+        assert!(w.fields.iter().any(|f| f.kind == WizardFieldKind::Host));
+        w.cycle_driver(1);
+        assert_eq!(w.driver(), "clickhouse");
+
+        let mut none = ConnectionWizard::new();
+        none.retain_drivers(|_| false);
+        assert_eq!(none.drivers, DRIVERS);
+    }
 }

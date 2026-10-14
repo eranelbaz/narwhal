@@ -41,6 +41,8 @@ pub struct App {
     /// asynchronously on the first tick of the event loop so the
     /// initial render isn't blocked on a network dial.
     pending_restore_connection: Option<String>,
+    /// First-run setup asked to add a connection right away.
+    open_wizard_on_start: bool,
 }
 
 impl App {
@@ -54,6 +56,7 @@ impl App {
             workspace_state_path: None,
             persist_settings: narwhal_config::WorkspacePersistSettings::default(),
             pending_restore_connection: None,
+            open_wizard_on_start: false,
         }
     }
 
@@ -71,6 +74,7 @@ impl App {
             workspace_state_path: None,
             persist_settings: narwhal_config::WorkspacePersistSettings::default(),
             pending_restore_connection: None,
+            open_wizard_on_start: false,
         }
     }
 
@@ -88,6 +92,7 @@ impl App {
             workspace_state_path: None,
             persist_settings: narwhal_config::WorkspacePersistSettings::default(),
             pending_restore_connection: None,
+            open_wizard_on_start: false,
         }
     }
 
@@ -207,6 +212,13 @@ impl App {
         self
     }
 
+    /// Open the `:add` wizard as soon as the TUI starts.
+    #[must_use]
+    pub const fn with_open_wizard_on_start(mut self, on: bool) -> Self {
+        self.open_wizard_on_start = on;
+        self
+    }
+
     pub async fn run(mut self) -> Result<()> {
         let mut guard = TerminalGuard::enter()?;
         let mut events = EventStream::new();
@@ -247,6 +259,9 @@ impl App {
                 "re-opening restored connection",
             );
             self.core.reopen_restored_connection(&name).await;
+        }
+        if self.open_wizard_on_start {
+            self.core.start_wizard().await;
         }
         self.draw(&mut guard)?;
         let mut scheduler = DrawScheduler::new(Instant::now());

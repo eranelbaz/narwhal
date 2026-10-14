@@ -46,8 +46,11 @@ pub enum Error {
         source: Source,
     },
 
-    #[error("driver `{0}` is not registered")]
+    #[error("driver `{0}` is not in this build")]
     UnknownDriver(String),
+
+    #[error("driver `{0}` is disabled — run `narwhal drivers enable {0}`")]
+    DriverDisabled(String),
 
     #[error("unsupported type: {0}")]
     UnsupportedType(String),

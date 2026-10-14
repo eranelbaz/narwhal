@@ -77,6 +77,20 @@ plugins_dir = "~/.config/narwhal/plugins"
 
 See [`plugins.md`](./plugins.md) for the Lua and WASM runtimes.
 
+### Drivers
+
+```toml
+[settings.drivers]
+enabled = ["postgres", "clickhouse"]   # "*" or omit = every driver
+```
+
+Written by the first-run setup and `narwhal drivers enable|disable`.
+Applies on next start. An empty list or an unknown name logs a warning;
+empty means every driver. The first-run setup only runs on a fresh
+install (terminal, no saved connections, no `[settings.drivers]`).
+These commands only touch `[settings.drivers]`; the rest of
+`config.toml`, comments included, is left as is. See [Drivers](../README.md#drivers).
+
 ### LSP
 
 ```toml

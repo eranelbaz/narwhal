@@ -30,7 +30,7 @@ pub mod sqlite;
 
 pub mod registry;
 
-pub use registry::DriverRegistry;
+pub use registry::{ALL_DRIVERS, DriverRegistry, unavailable_hint};
 
 /// Convenience constructor for a registry preloaded with every driver
 /// compiled into this build. Equivalent to

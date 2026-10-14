@@ -102,6 +102,37 @@ Full setup: [`docs/mcp.md`](./docs/mcp.md).
 | ClickHouse | HTTP + rustls | ✅ | ✅ | ✅ | ✅ |
 | SQL Server | `tiberius` + rustls | ✅ | buffered | — | ✅ |
 
+## Drivers
+
+Every engine is compiled into the release binary; you pick which
+ones are active. On first launch narwhal asks which databases you
+use, then offers to add your first connection.
+
+```sh
+narwhal drivers                       # ✓ enabled / ✗ disabled / not in this build
+narwhal drivers enable clickhouse
+narwhal drivers disable duckdb mssql
+```
+
+The choice lives in `config.toml` under `[settings.drivers] enabled`.
+Changes apply on the next start. `"*"` (what "all" saves) also
+picks up drivers added in future versions. Saved connections whose
+driver is disabled or not in the build stay in the sidebar, greyed
+out; opening one tells you how to fix it.
+
+**Slim builds.** To leave engines out of the binary entirely
+(smaller binary, faster compile, no C++ toolchain for DuckDB):
+
+```sh
+cargo install narwhaldb --no-default-features \
+  --features driver-postgres,driver-clickhouse
+```
+
+Feature names: `driver-postgres`, `driver-mysql`, `driver-sqlite`,
+`driver-duckdb`, `driver-clickhouse`, `driver-mssql`, or
+`all-drivers` (the default). Opening a connection whose driver is
+not compiled in prints the exact reinstall command.
+
 ## Highlights
 
 - **Six engines, one TUI.** Switch with `:open`, every driver speaks the
@@ -159,6 +190,7 @@ this commit, it has these fixes/features not yet in upstream (0 commits behind):
 - `fix(completion)`: fetch columns on first use for dot completion
 - `fix(completion)`: resolve aliases declared after the cursor
 - `fix(clickhouse)`: send SQL in body for the connect-time ping request
+- `feat(drivers)`: every driver built in by default; first-run setup and `narwhal drivers` pick the active ones
 
 ## Contributing
 

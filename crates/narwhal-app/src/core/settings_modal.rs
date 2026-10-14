@@ -115,6 +115,10 @@ impl AppCore {
         }
         let paths =
             narwhal_config::ConfigPaths::discover().map_err(|e| format!("config paths: {e}"))?;
+        let mut settings = settings.clone();
+        if let Some(disk) = self.load_settings_from_disk() {
+            settings.drivers = disk.drivers;
+        }
         settings
             .save(&paths.settings_file())
             .map_err(|e| format!("{e}"))?;

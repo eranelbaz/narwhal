@@ -39,6 +39,7 @@ narwhal-app.workspace = true
 narwhal-commands.workspace = true
 narwhal-config.workspace = true
 narwhal-core.workspace = true
+narwhal-drivers.workspace = true
 narwhal-history.workspace = true
 narwhal-audit.workspace = true
 narwhal-mcp.workspace = true
@@ -54,7 +55,7 @@ tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 
 [features]
-default = ["driver-postgres", "driver-sqlite"]
+default = ["all-drivers"]
 driver-postgres = ["narwhal-app/driver-postgres", "narwhal-mcp/driver-postgres"]
 driver-sqlite = ["narwhal-app/driver-sqlite", "narwhal-mcp/driver-sqlite"]
 driver-mysql = ["narwhal-app/driver-mysql", "narwhal-mcp/driver-mysql"]

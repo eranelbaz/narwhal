@@ -35,6 +35,9 @@ cargo build -p narwhaldb --release
 ./target/release/narwhal --version
 ```
 
+Every driver is in the default feature set (`all-drivers`). Which
+ones are active at runtime is a config choice — see `narwhal drivers`.
+
 A minimal SQLite-only build:
 
 ```sh

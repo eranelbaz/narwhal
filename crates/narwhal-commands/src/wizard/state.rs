@@ -10,10 +10,20 @@ use uuid::Uuid;
 
 use super::fields::WizardField;
 
-pub const DRIVERS: &[&str] = &["sqlite", "postgres", "mysql", "clickhouse", "duckdb"];
+pub const DRIVERS: &[&str] = &[
+    "sqlite",
+    "postgres",
+    "mysql",
+    "clickhouse",
+    "duckdb",
+    "mssql",
+];
 
 #[derive(Debug)]
 pub struct ConnectionWizard {
+    /// Drivers offered in the selector. Starts as [`DRIVERS`]; the app
+    /// narrows it to the enabled ones via `retain_drivers`.
+    pub drivers: Vec<&'static str>,
     pub driver_index: usize,
     pub fields: Vec<WizardField>,
     /// Index 0 is the driver selector; indexes `1..=fields.len()` target a

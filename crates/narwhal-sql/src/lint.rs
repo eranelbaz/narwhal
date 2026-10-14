@@ -368,7 +368,7 @@ fn begins_with_keyword(s: &str, kw: &str) -> bool {
 }
 
 /// Advance past ASCII whitespace.
-fn skip_ws(b: &[u8], mut i: usize) -> usize {
+const fn skip_ws(b: &[u8], mut i: usize) -> usize {
     while i < b.len() && b[i].is_ascii_whitespace() {
         i += 1;
     }

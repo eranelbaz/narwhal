@@ -339,6 +339,12 @@ pub(super) fn display_from_state<'a>(
 /// Human-readable label for a sidebar row.
 pub(super) fn sidebar_label(item: &SidebarItem) -> String {
     match item {
+        SidebarItem::Connection {
+            name,
+            driver,
+            unavailable: Some(reason),
+            ..
+        } => format!("{name} ({driver} · {reason})"),
         SidebarItem::Connection { name, driver, .. } => format!("{name} ({driver})"),
         SidebarItem::Schema { name } => name.clone(),
         SidebarItem::Table { name, .. } => name.clone(),
@@ -357,6 +363,10 @@ pub(super) const fn sidebar_depth(item: &SidebarItem) -> u8 {
 /// Visual classification (icon/colour) for a sidebar row.
 pub(super) const fn sidebar_kind(item: &SidebarItem) -> SidebarRowKind {
     match item {
+        SidebarItem::Connection {
+            unavailable: Some(_),
+            ..
+        } => SidebarRowKind::DisabledConnection,
         SidebarItem::Connection { active: true, .. } => SidebarRowKind::ActiveConnection,
         SidebarItem::Connection { .. } => SidebarRowKind::Connection,
         SidebarItem::Schema { .. } => SidebarRowKind::Schema,

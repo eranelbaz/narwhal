@@ -12,6 +12,8 @@ pub enum ConfigError {
     Toml(#[from] toml::de::Error),
     #[error("toml serialize: {0}")]
     TomlSer(#[from] toml::ser::Error),
+    #[error("toml edit: {0}")]
+    TomlEdit(#[from] toml_edit::TomlError),
     #[error("validation: {0}")]
     Validation(String),
     #[error("interpolation: {0}")]
@@ -130,6 +132,65 @@ pub struct Settings {
     /// currently informational only.
     #[serde(default)]
     pub lsp: LspSettings,
+    /// Which compiled-in drivers are active. Managed by
+    /// `narwhal drivers` and the first-run setup.
+    #[serde(default)]
+    pub drivers: DriverSettings,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct DriverSettings {
+    /// `None` or `["*"]` enables every compiled-in driver.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<Vec<String>>,
+}
+
+impl DriverSettings {
+    pub const ALL: &'static str = "*";
+
+    /// The explicit allow-list, or `None` when every driver is on.
+    #[must_use]
+    pub fn allow_list(&self) -> Option<&[String]> {
+        self.enabled
+            .as_deref()
+            .filter(|e| !e.iter().any(|d| d == Self::ALL))
+    }
+}
+
+impl Settings {
+    /// Write only `[settings.drivers] enabled`, keeping the rest of
+    /// the file (comments, ordering) intact. Falls back to a full
+    /// [`Settings::save`] when the file does not exist yet.
+    pub fn save_drivers(&self, path: &Path) -> Result<(), ConfigError> {
+        if !path.exists() {
+            return self.save(path);
+        }
+        let mut doc: toml_edit::DocumentMut = std::fs::read_to_string(path)?.parse()?;
+        let settings = doc
+            .entry("settings")
+            .or_insert_with(toml_edit::table)
+            .as_table_like_mut()
+            .ok_or_else(|| ConfigError::Validation("`settings` is not a table".into()))?;
+        let drivers = settings
+            .entry("drivers")
+            .or_insert(toml_edit::table())
+            .as_table_like_mut()
+            .ok_or_else(|| ConfigError::Validation("`settings.drivers` is not a table".into()))?;
+        match &self.drivers.enabled {
+            Some(list) => {
+                drivers.insert(
+                    "enabled",
+                    toml_edit::value(list.iter().collect::<toml_edit::Array>()),
+                );
+            }
+            None => {
+                drivers.remove("enabled");
+            }
+        }
+        atomic_write(path, &doc.to_string()).map_err(ConfigError::from)
+    }
 }
 
 /// LSP client configuration. **Stub in v2.0** — the contract is

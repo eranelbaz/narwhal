@@ -12,7 +12,6 @@ use super::sessions::emit_audit_config_change;
 use super::{AppCore, SidebarItem, SnippetsModal};
 use crate::meta::MetaRequest;
 use crate::run::RunMode;
-use crate::wizard::DRIVERS;
 
 impl AppCore {
     pub async fn open_help(&mut self) {
@@ -385,7 +384,7 @@ impl AppCore {
             CtKey::Char(c) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
                 if wizard.focused == 0 {
                     // Allow first-letter shortcuts on the driver row.
-                    if let Some(idx) = DRIVERS.iter().position(|d| d.starts_with(c)) {
+                    if let Some(idx) = wizard.drivers.iter().position(|d| d.starts_with(c)) {
                         wizard.driver_index = idx;
                         wizard.cycle_driver(0);
                     }

@@ -58,6 +58,7 @@ anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
+toml_edit = "0.22"
 
 # File system watching (used by the settings live-reload watcher).
 notify = { version = "6.1", default-features = false, features = ["macos_kqueue"] }
@@ -168,8 +169,8 @@ narwhal-lsp = { path = "crates/narwhal-lsp", version = "2.0.0" }
 # Pivot table aggregation.
 narwhal-pivot = { path = "crates/narwhal-pivot", version = "2.0.0" }
 narwhal-tui = { path = "crates/narwhal-tui", version = "2.0.0" }
-narwhal-app = { path = "crates/narwhal-app", version = "2.0.0" }
-narwhal-mcp = { path = "crates/narwhal-mcp", version = "2.0.0" }
+narwhal-app = { path = "crates/narwhal-app", version = "2.0.0", default-features = false }
+narwhal-mcp = { path = "crates/narwhal-mcp", version = "2.0.0", default-features = false }
 
 # Tree-sitter SQL parser. Pinned to 0.26 / 0.3 — the SQL grammar
 # tracks the parser ABI in lockstep, so bumping either side requires

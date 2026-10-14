@@ -26,7 +26,6 @@ use super::{AppCore, ResultState};
 use crate::commands::{Command, parse};
 use crate::completion::CompletionKind;
 use crate::run::RunMode;
-use crate::wizard::DRIVERS;
 
 impl AppCore {
     pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -234,7 +233,7 @@ impl AppCore {
 
         if let Some(wizard) = self.modals.wizard.as_ref() {
             let view = WizardView {
-                drivers: DRIVERS,
+                drivers: &wizard.drivers,
                 driver_index: wizard.driver_index,
                 fields: wizard
                     .fields

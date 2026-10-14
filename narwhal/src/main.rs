@@ -73,6 +73,33 @@ enum Mode {
     /// a structural diff, and renders DDL through the chosen
     /// dialect emitter.
     SchemaDiff(SchemaDiffArgs),
+    /// List, enable, or disable database drivers.
+    ///
+    /// Every driver ships compiled in; this picks which ones are
+    /// active. Changes apply on the next start.
+    Drivers(DriversArgs),
+}
+
+#[derive(Debug, clap::Args)]
+struct DriversArgs {
+    #[command(subcommand)]
+    command: Option<DriversCommand>,
+}
+
+#[derive(Debug, Subcommand)]
+enum DriversCommand {
+    /// Show every driver and whether it is enabled (default).
+    List,
+    /// Turn drivers on.
+    Enable {
+        #[arg(required = true, value_name = "DRIVER")]
+        names: Vec<String>,
+    },
+    /// Turn drivers off. Connections using them show greyed out.
+    Disable {
+        #[arg(required = true, value_name = "DRIVER")]
+        names: Vec<String>,
+    },
 }
 
 #[derive(Debug, clap::Args)]
@@ -220,6 +247,7 @@ async fn main() -> Result<()> {
         Some(Mode::Config(args)) => run_config(paths, args),
         Some(Mode::Audit(args)) => run_audit(paths, args).await,
         Some(Mode::SchemaDiff(args)) => run_schema_diff(paths, args, cli.read_only).await,
+        Some(Mode::Drivers(args)) => run_drivers(&paths, args),
         None => run_tui(paths, cli.read_only).await,
     }
 }
@@ -411,6 +439,175 @@ fn print_validate_outcome(
     }
 }
 
+fn compiled_drivers() -> Vec<&'static str> {
+    let registry = McpDriverRegistry::with_defaults();
+    narwhal_drivers::ALL_DRIVERS
+        .iter()
+        .copied()
+        .filter(|d| registry.contains(d))
+        .collect()
+}
+
+/// Settings for a command that writes them back. Refuses anything but
+/// a clean v2 load so a save never clobbers a v1 or broken file.
+fn load_settings_for_write(paths: &ConfigPaths) -> Result<Settings> {
+    Settings::load(&paths.settings_file()).map_err(|error| match error {
+        narwhal_config::ConfigError::NeedsMigration { .. } => {
+            anyhow::anyhow!("settings file is v1 — run `narwhal migrate-config` first")
+        }
+        other => anyhow::anyhow!("loading {}: {other}", paths.settings_file().display()),
+    })
+}
+
+fn run_drivers(paths: &ConfigPaths, args: DriversArgs) -> Result<()> {
+    let compiled = compiled_drivers();
+    let (names, enable) = match args.command.unwrap_or(DriversCommand::List) {
+        DriversCommand::List => {
+            let settings = load_settings_or_warn(paths);
+            let enabled = settings.drivers.allow_list();
+            for d in narwhal_drivers::ALL_DRIVERS {
+                let state = if !compiled.contains(d) {
+                    "  not in this build"
+                } else if enabled.is_none_or(|e| e.iter().any(|x| x == d)) {
+                    "✓ enabled"
+                } else {
+                    "✗ disabled"
+                };
+                println!("{state:<20} {d}");
+            }
+            return Ok(());
+        }
+        DriversCommand::Enable { names } => (names, true),
+        DriversCommand::Disable { names } => (names, false),
+    };
+    for name in &names {
+        if !narwhal_drivers::ALL_DRIVERS.contains(&name.as_str()) {
+            anyhow::bail!(
+                "unknown driver `{name}` — known: {}",
+                narwhal_drivers::ALL_DRIVERS.join(", ")
+            );
+        }
+        if !compiled.contains(&name.as_str()) {
+            anyhow::bail!(
+                "`{name}` is not in this build — reinstall with `cargo install narwhaldb --features driver-{name}`"
+            );
+        }
+    }
+    let mut settings = load_settings_for_write(paths)?;
+    let mut enabled: Vec<String> = settings.drivers.allow_list().map_or_else(
+        || compiled.iter().map(|d| (*d).to_owned()).collect(),
+        <[String]>::to_vec,
+    );
+    for name in &names {
+        enabled.retain(|e| e != name);
+        if enable {
+            enabled.push(name.clone());
+        }
+    }
+    if enabled.is_empty() {
+        anyhow::bail!("refusing to disable every driver");
+    }
+    enabled.sort_by_key(|e| narwhal_drivers::ALL_DRIVERS.iter().position(|d| d == e));
+    settings.drivers.enabled = if compiled.iter().all(|d| enabled.iter().any(|e| e == d)) {
+        Some(vec![narwhal_config::DriverSettings::ALL.to_owned()])
+    } else {
+        Some(enabled)
+    };
+    settings
+        .save_drivers(&paths.settings_file())
+        .context("saving settings")?;
+    println!(
+        "{} {} — applies on next start",
+        if enable { "enabled" } else { "disabled" },
+        names.join(", ")
+    );
+    Ok(())
+}
+
+/// One-time onboarding for fresh installs: runs only on a terminal,
+/// with no saved connections and `[drivers] enabled` unset, so upgrades
+/// never see it. Returns whether to open the `:add` wizard.
+fn run_first_run_setup(paths: &ConfigPaths) -> Result<bool> {
+    use std::io::{BufRead as _, IsTerminal as _};
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Ok(false);
+    }
+    if !load_connections_or_warn(paths).connections.is_empty() {
+        return Ok(false);
+    }
+    let Ok(mut settings) = load_settings_for_write(paths) else {
+        return Ok(false);
+    };
+    if settings.drivers.enabled.is_some() {
+        return Ok(false);
+    }
+    let compiled = compiled_drivers();
+    println!("Welcome to narwhal! Which databases do you use?\n");
+    for (i, d) in compiled.iter().enumerate() {
+        println!("  {}) {d}", i + 1);
+    }
+    let mut stdin = std::io::stdin().lock();
+    let mut picked = Vec::new();
+    while picked.is_empty() {
+        print!("\nNumbers or names, comma-separated (Enter = all): ");
+        std::io::stdout().flush()?;
+        let mut line = String::new();
+        if stdin.read_line(&mut line)? == 0 {
+            return Ok(false);
+        }
+        if line.trim().is_empty() {
+            picked = compiled.clone();
+            break;
+        }
+        for token in line
+            .split([',', ' '])
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            let hit = token
+                .parse::<usize>()
+                .ok()
+                .and_then(|n| compiled.get(n.wrapping_sub(1)).copied())
+                .or_else(|| {
+                    compiled
+                        .iter()
+                        .copied()
+                        .find(|d| d.eq_ignore_ascii_case(token))
+                });
+            match hit {
+                Some(d) if !picked.contains(&d) => picked.push(d),
+                Some(_) => {}
+                None => {
+                    println!("  unknown choice `{token}`");
+                    picked.clear();
+                    break;
+                }
+            }
+        }
+    }
+    picked.sort_by_key(|p| compiled.iter().position(|d| d == p));
+    settings.drivers.enabled = Some(if picked.len() == compiled.len() {
+        vec![narwhal_config::DriverSettings::ALL.to_owned()]
+    } else {
+        picked.iter().map(|d| (*d).to_owned()).collect()
+    });
+    settings
+        .save_drivers(&paths.settings_file())
+        .context("saving settings")?;
+    println!(
+        "Enabled: {} (change any time with `narwhal drivers`)",
+        picked.join(", ")
+    );
+
+    print!("Add your first connection now? [Y/n]: ");
+    std::io::stdout().flush()?;
+    let mut line = String::new();
+    if stdin.read_line(&mut line)? == 0 {
+        return Ok(false);
+    }
+    Ok(!line.trim().to_ascii_lowercase().starts_with('n'))
+}
+
 /// TUI mode (default): logs go to a daily-rotating file because the
 /// terminal is owned by the UI in raw mode.
 async fn run_tui(paths: ConfigPaths, read_only: bool) -> Result<()> {
@@ -424,6 +621,11 @@ async fn run_tui(paths: ConfigPaths, read_only: bool) -> Result<()> {
 
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "starting narwhal");
 
+    let open_wizard = run_first_run_setup(&paths).unwrap_or_else(|error| {
+        tracing::warn!(error = %error, "first-run setup skipped");
+        false
+    });
+
     // log instead of silently swallowing a malformed settings file
     // — a user-visible warning beats falling back to defaults blind.
     let settings = load_settings_or_warn(&paths);
@@ -436,7 +638,7 @@ async fn run_tui(paths: ConfigPaths, read_only: bool) -> Result<()> {
         }
     };
 
-    let registry = AppDriverRegistry::with_defaults();
+    let registry = AppDriverRegistry::with_defaults().with_enabled(settings.drivers.allow_list());
     let credentials: Arc<dyn DynCredentialStore> = Arc::new(KeyringStore::new());
     let clipboard: Arc<dyn Clipboard> = Arc::new(ArboardClipboard::new());
     // build the vault registry from settings.vault.providers.
@@ -468,7 +670,8 @@ async fn run_tui(paths: ConfigPaths, read_only: bool) -> Result<()> {
     }
     app = app
         .with_plugins_dir(&paths.plugins_dir())
-        .with_read_only(read_only);
+        .with_read_only(read_only)
+        .with_open_wizard_on_start(open_wizard);
 
     if let Err(error) = app.run().await {
         tracing::error!(error = %error, "fatal error");
@@ -510,7 +713,8 @@ async fn run_mcp(paths: ConfigPaths, force_read_only: bool) -> Result<()> {
     let connections = load_connections_or_warn(&paths);
     let settings = load_settings_or_warn(&paths);
 
-    let drivers = Arc::new(McpDriverRegistry::with_defaults());
+    let drivers =
+        Arc::new(McpDriverRegistry::with_defaults().with_enabled(settings.drivers.allow_list()));
     let credentials: Arc<dyn DynCredentialStore> = Arc::new(KeyringStore::new());
     let vault = Arc::new(build_vault_registry(&settings.vault, "MCP"));
     let journal = match Journal::open(paths.history_file()).await {
@@ -634,18 +838,21 @@ async fn run_exec(paths: ConfigPaths, args: ExecArgs, global_read_only: bool) ->
             )
         })?;
 
-    let registry = McpDriverRegistry::with_defaults();
     let credentials: Arc<dyn DynCredentialStore> = Arc::new(KeyringStore::new());
-    // load settings just for the vault block. The exec
+    // load settings just for the vault + drivers blocks. The exec
     // path doesn't care about the rest of the settings struct —
     // it has its own CLI flags for everything else.
     let settings = load_settings_or_warn(&paths);
+    let registry = McpDriverRegistry::with_defaults().with_enabled(settings.drivers.allow_list());
     let vault = build_vault_registry(&settings.vault, "exec");
 
     let password = resolve_password(&*credentials, &vault, &config).await;
-    let driver = registry
-        .get(&config.driver)
-        .map_err(|e| anyhow::anyhow!("driver: {e}"))?;
+    let driver = registry.get(&config.driver).map_err(|e| {
+        anyhow::anyhow!(
+            narwhal_drivers::unavailable_hint(&registry, &config.driver)
+                .unwrap_or_else(|| format!("driver: {e}"))
+        )
+    })?;
 
     // L36 #7 + #C3 + #C4: run the pre-connect pipeline before the
     // driver dials in. Skipped entirely under `--read-only` so an
@@ -1063,9 +1270,9 @@ async fn run_schema_diff(
         )
     })?;
 
-    let registry = McpDriverRegistry::with_defaults();
     let credentials: Arc<dyn DynCredentialStore> = Arc::new(KeyringStore::new());
     let settings = load_settings_or_warn(&paths);
+    let registry = McpDriverRegistry::with_defaults().with_enabled(settings.drivers.allow_list());
     let vault = build_vault_registry(&settings.vault, "schema-diff");
 
     let source_tables = introspect_for_diff(
@@ -1187,9 +1394,12 @@ async fn introspect_for_diff(
             .context("applying pre-connect password substitution")?;
     }
 
-    let driver = registry
-        .get(&config.driver)
-        .map_err(|e| anyhow::anyhow!("driver: {e}"))?;
+    let driver = registry.get(&config.driver).map_err(|e| {
+        anyhow::anyhow!(
+            narwhal_drivers::unavailable_hint(registry, &config.driver)
+                .unwrap_or_else(|| format!("driver: {e}"))
+        )
+    })?;
     let mut conn = driver
         .connect(&config, password.as_deref())
         .await

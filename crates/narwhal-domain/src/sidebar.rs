@@ -11,6 +11,8 @@ pub enum SidebarItem {
         name: String,
         driver: String,
         active: bool,
+        /// Why the driver can't be used (`disabled`, `not in build`), if so.
+        unavailable: Option<&'static str>,
     },
     Schema {
         name: String,

@@ -301,6 +301,13 @@ impl AppCore {
                 name: conn.name.clone(),
                 driver: conn.driver.clone(),
                 active,
+                unavailable: if self.deps.registry.is_disabled(&conn.driver) {
+                    Some("disabled")
+                } else if self.deps.registry.contains(&conn.driver) {
+                    None
+                } else {
+                    Some("not in build")
+                },
             });
             if active {
                 if let Some(session) = self.session.active.as_ref() {

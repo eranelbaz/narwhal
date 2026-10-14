@@ -60,9 +60,9 @@ expression: "snapshot_core_sized(&mut core, 130, 66)"
 │            │                                                                                                      │            │
 │            │ Results                                                                                              │            │
 │            │  h j k l / arrows                     move selection                                                 │            │
+│            │  0 / ^ / $ / Home / End               jump to first / last column                                    │            │
 │            │  Enter                                open cell popup                                                │            │
 │            │  e                                    edit cell value (Enter commit, Esc cancel)                     │            │
-│            │  y / Y                                yank cell / row to clipboard                                   │            │
 │            └──────────────────────────────────────────────────────────────────────────────────────────────────────┘            │
 │                                ││                                                                                              │
 │                                ││                                                                                              │

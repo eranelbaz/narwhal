@@ -239,6 +239,10 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "move selection",
             },
             CheatsheetEntry {
+                keys: "0 / ^ / $ / Home / End",
+                description: "jump to first / last column",
+            },
+            CheatsheetEntry {
                 keys: "Enter",
                 description: "open cell popup",
             },
@@ -248,7 +252,7 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
             },
             CheatsheetEntry {
                 keys: "y / Y",
-                description: "yank cell / row to clipboard",
+                description: "yank cell / row (or error message) to clipboard",
             },
             CheatsheetEntry {
                 keys: "R / Shift-Enter",

@@ -172,6 +172,18 @@ impl AppCore {
                     .select(Some(visible_count - 1));
             }
             Action::ResultsLastRow => {}
+            Action::ResultsFirstColumn => {
+                self.ui.tabs[self.ui.active_tab]
+                    .results
+                    .active_mut()
+                    .column_index = 0;
+            }
+            Action::ResultsLastColumn => {
+                self.ui.tabs[self.ui.active_tab]
+                    .results
+                    .active_mut()
+                    .column_index = col_count.saturating_sub(1);
+            }
             Action::ResultsToggleSort => self.toggle_sort().await,
             Action::ResultsOpenFilterPrompt => self.open_filter_prompt().await,
             Action::ResultsNextMatch => self.advance_search(1).await,
@@ -519,7 +531,7 @@ impl AppCore {
             }
         };
         self.ui.status.message = match self.deps.clipboard.set_text(&text) {
-            Ok(()) => format!("yanked {} char(s) to clipboard", text.len()),
+            Ok(()) => format!("yanked {} char(s) to clipboard", text.chars().count()),
             Err(error) => format!("yank failed: {error}"),
         };
     }
@@ -527,6 +539,7 @@ impl AppCore {
     async fn yank_row(&mut self) {
         let row_idx = self.selected_original_row().await;
         let bundle = &self.ui.tabs[self.ui.active_tab].results;
+        let is_error = matches!(bundle.active_state(), ResultState::Error { .. });
         let (text, cells) = match narwhal_domain::result::actions::prepare_yank_row(bundle, row_idx)
         {
             Ok(pair) => pair,
@@ -536,6 +549,7 @@ impl AppCore {
             }
         };
         self.ui.status.message = match self.deps.clipboard.set_text(&text) {
+            Ok(()) if is_error => "yanked error message to clipboard".into(),
             Ok(()) => format!("yanked row ({cells} cell(s)) to clipboard"),
             Err(error) => format!("yank failed: {error}"),
         };

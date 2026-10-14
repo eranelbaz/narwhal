@@ -182,7 +182,8 @@ pub fn render_results(
             let p = Paragraph::new(vec![Line::from(Span::styled(
                 format!("  error ({elapsed_ms} ms): {message}"),
                 Style::default().fg(theme.error),
-            ))]);
+            ))])
+            .wrap(Wrap { trim: false });
             frame.render_widget(p, content_area);
             ResultHitRegions::default()
         }
@@ -291,7 +292,9 @@ fn build_title(display: &ResultDisplay<'_>, view: &ResultView) -> String {
             let count = format_count(*rows_so_far);
             format!(" cancelled at {count} rows · {elapsed_ms}ms ")
         }
-        ResultDisplay::Error { elapsed_ms, .. } => format!(" results · error · {elapsed_ms} ms "),
+        ResultDisplay::Error { elapsed_ms, .. } => {
+            format!(" results · error · {elapsed_ms} ms · y copy ")
+        }
     };
     // Append filter tag when a filter is active but the prompt is closed.
     if !view.filter.is_empty() && !view.filter_prompt_open {

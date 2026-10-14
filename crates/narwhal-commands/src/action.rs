@@ -91,6 +91,8 @@ pub enum Action {
     ResultsMoveRight,
     ResultsFirstRow,
     ResultsLastRow,
+    ResultsFirstColumn,
+    ResultsLastColumn,
 
     // ─── Results pane: sort / filter / search ──────────────────────────
     ResultsToggleSort,
@@ -144,6 +146,8 @@ impl Action {
             | Self::ResultsMoveRight
             | Self::ResultsFirstRow
             | Self::ResultsLastRow
+            | Self::ResultsFirstColumn
+            | Self::ResultsLastColumn
             | Self::ResultsToggleSort
             | Self::ResultsOpenFilterPrompt
             | Self::ResultsNextMatch

@@ -428,7 +428,8 @@ pub enum RowDetailMotion {
 ///
 /// `selected_row` is the original-row index from
 /// [`selected_original_row`]; pass `Some(0)` if no row is highlighted
-/// so the historical "first row" fallback survives.
+/// so the historical "first row" fallback survives. An error result
+/// yanks the error message.
 pub fn prepare_yank_cell(
     bundle: &ResultBundle,
     selected_row: Option<usize>,
@@ -438,6 +439,7 @@ pub fn prepare_yank_cell(
         ResultState::Rows { rows, columns, .. } | ResultState::Running { rows, columns, .. } => {
             (rows, columns)
         }
+        ResultState::Error { message, .. } => return Ok(message.clone()),
         _ => return Err("no cell to yank"),
     };
     let row_idx = selected_row.unwrap_or(0);
@@ -458,6 +460,7 @@ pub fn prepare_yank_row(
 ) -> Result<(String, usize), &'static str> {
     let rows = match bundle.active_state() {
         ResultState::Rows { rows, .. } | ResultState::Running { rows, .. } => rows,
+        ResultState::Error { message, .. } => return Ok((message.clone(), 1)),
         _ => return Err("no row to yank"),
     };
     let row_idx = selected_row.unwrap_or(0);
@@ -1033,6 +1036,20 @@ mod tests {
     fn yank_cell_no_state_errors() {
         let b = ResultBundle::default();
         assert_eq!(prepare_yank_cell(&b, Some(0)), Err("no cell to yank"));
+    }
+
+    #[test]
+    fn yank_error_copies_message() {
+        let b = ResultBundle::single(
+            ResultState::Error {
+                message: "relation \"x\" does not exist".into(),
+                elapsed_ms: 3,
+            },
+            ResultView::new(),
+        );
+        let msg = "relation \"x\" does not exist".to_string();
+        assert_eq!(prepare_yank_cell(&b, None), Ok(msg.clone()));
+        assert_eq!(prepare_yank_row(&b, None), Ok((msg, 1)));
     }
 
     #[test]

@@ -46,6 +46,12 @@ impl KeyChord {
                 mods |= KeyModifiers::SHIFT;
                 KeyCode::Char(c.to_ascii_lowercase())
             }
+            // Some terminals report SHIFT alongside shifted symbols (`$`,
+            // `^`); the character already encodes it.
+            KeyCode::Char(c) if c.is_ascii_punctuation() => {
+                mods.remove(KeyModifiers::SHIFT);
+                code
+            }
             other => other,
         };
         Self { code, mods }
@@ -344,6 +350,19 @@ impl Keymap {
         );
         self.bind(Results, KeyChord::ch('g'), A::ResultsFirstRow);
         self.bind(Results, KeyChord::shift('g'), A::ResultsLastRow);
+        for chord in [
+            KeyChord::ch('0'),
+            KeyChord::ch('^'),
+            KeyChord::new(KeyCode::Home, KeyModifiers::NONE),
+        ] {
+            self.bind(Results, chord, A::ResultsFirstColumn);
+        }
+        for chord in [
+            KeyChord::ch('$'),
+            KeyChord::new(KeyCode::End, KeyModifiers::NONE),
+        ] {
+            self.bind(Results, chord, A::ResultsLastColumn);
+        }
 
         // ─── Sort / filter / search ────────────────────────────────────
         self.bind(Results, KeyChord::ch('s'), A::ResultsToggleSort);
@@ -552,6 +571,28 @@ mod tests {
         let ev = KeyEvent::new(KeyCode::Char('K'), KeyModifiers::NONE);
         let chord = KeyChord::from_event(ev);
         assert_eq!(chord, KeyChord::shift('k'));
+    }
+
+    #[test]
+    fn from_event_drops_shift_on_symbols() {
+        let ev = KeyEvent::new(KeyCode::Char('$'), KeyModifiers::SHIFT);
+        assert_eq!(KeyChord::from_event(ev), KeyChord::ch('$'));
+        assert_eq!(KeyChord::parse("shift+$").unwrap(), KeyChord::ch('$'));
+    }
+
+    #[test]
+    fn builtin_resolves_line_start_end_to_columns() {
+        let map = Keymap::builtin();
+        for c in ['0', '^'] {
+            assert_eq!(
+                map.resolve(KeyGroup::Results, KeyChord::ch(c)),
+                Some(Action::ResultsFirstColumn)
+            );
+        }
+        assert_eq!(
+            map.resolve(KeyGroup::Results, KeyChord::ch('$')),
+            Some(Action::ResultsLastColumn)
+        );
     }
 
     #[test]

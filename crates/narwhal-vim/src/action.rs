@@ -41,6 +41,8 @@ pub enum Action {
     RepeatSearch,
     /// Repeat the last search in the reverse direction (`N`).
     RepeatSearchReverse,
+    /// Undo the last `count` changes (`u`, `3u`).
+    Undo { count: usize },
     /// The key was consumed but produced no observable effect (for example, a
     /// partially typed count or operator).
     Pending,

@@ -1,6 +1,6 @@
 //! One editor tab: name, buffer, run state, results.
 
-use narwhal_domain::editor::EditorBuffer;
+use narwhal_domain::editor::{BufferSnapshot, EditorBuffer};
 use narwhal_pivot::PivotConfig;
 use narwhal_sql::treesitter::{HighlightSpan, Parser as TsParser};
 
@@ -59,6 +59,10 @@ pub struct Tab {
     pub(crate) pending_preview: Option<PendingPreviewState>,
     /// Vim visual-mode anchor; the selection spans anchor..=cursor.
     pub(crate) visual_anchor: Option<(usize, usize)>,
+    /// Buffer state and undo depth when the current vim insert session
+    /// began; the whole session commits as one undo step on leaving
+    /// insert mode.
+    pub(crate) insert_undo: Option<(BufferSnapshot, usize)>,
     /// per-tab tree-sitter parser. Lazily initialised on the
     /// first highlight request so a tab that never opens an editor
     /// (e.g. one used only via :run) pays nothing. `None` after
@@ -111,6 +115,7 @@ impl Tab {
             pending: PendingChanges::new(),
             pending_preview: None,
             visual_anchor: None,
+            insert_undo: None,
             ts_parser: None,
             sql_highlights: None,
             sql_highlights_buf_len: 0,

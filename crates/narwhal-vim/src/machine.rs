@@ -211,6 +211,9 @@ impl Vim {
             KeyCode::Char('?') => Action::OpenSearch(SearchDirection::Backward),
             KeyCode::Char('n') => Action::RepeatSearch,
             KeyCode::Char('N') => Action::RepeatSearchReverse,
+            KeyCode::Char('u') => Action::Undo {
+                count: self.take_count(),
+            },
             KeyCode::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_buffer.clear();
@@ -703,6 +706,15 @@ mod tests {
                 count: 1,
             }
         );
+    }
+
+    #[test]
+    fn u_undoes_in_normal_mode() {
+        let mut vim = Vim::new();
+        assert_eq!(vim.handle(Key::char('u')), Action::Undo { count: 1 });
+        assert_eq!(vim.mode(), Mode::Normal);
+        vim.handle(Key::char('3'));
+        assert_eq!(vim.handle(Key::char('u')), Action::Undo { count: 3 });
     }
 
     #[test]

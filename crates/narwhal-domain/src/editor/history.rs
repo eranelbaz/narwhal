@@ -99,6 +99,7 @@ pub struct EditHistory {
     /// the pending compound instead of the main undo stack.
     txn_depth: u32,
     txn_pending: Vec<EditOp>,
+    recorded: usize,
 }
 
 impl Default for EditHistory {
@@ -117,6 +118,7 @@ impl EditHistory {
             capacity,
             txn_depth: 0,
             txn_pending: Vec::new(),
+            recorded: 0,
         }
     }
 
@@ -158,6 +160,7 @@ impl EditHistory {
             self.undo.remove(0);
         }
         self.undo.push(op);
+        self.recorded = self.recorded.wrapping_add(1);
     }
 
     /// Open a compound-edit transaction. Every `record` until the
@@ -231,6 +234,19 @@ impl EditHistory {
         let op = self.redo.pop()?;
         self.undo.push(op.clone());
         Some(op)
+    }
+
+    /// Monotonic count of top-level records, for [`Self::discard_since`].
+    #[must_use]
+    pub const fn mark(&self) -> usize {
+        self.recorded
+    }
+
+    /// Drop undo entries recorded after `mark`, used to fold a run of
+    /// edits into a single entry recorded afterwards.
+    pub fn discard_since(&mut self, mark: usize) {
+        let n = self.recorded.saturating_sub(mark).min(self.undo.len());
+        self.undo.truncate(self.undo.len() - n);
     }
 
     /// Drop every recorded op. Used when the buffer is reset (new
@@ -349,6 +365,19 @@ mod tests {
             EditOp::Compound(children) => assert_eq!(children.len(), 3),
             other => panic!("expected Compound, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn discard_since_survives_capacity_trim() {
+        let mut h = EditHistory::with_capacity(3);
+        for i in 0..3_usize {
+            h.record(ins((0, i), "x", (0, i), (0, i + 1)));
+        }
+        let mark = h.mark();
+        h.record(ins((0, 3), "y", (0, 3), (0, 4)));
+        h.record(ins((0, 4), "z", (0, 4), (0, 5)));
+        h.discard_since(mark);
+        assert_eq!(h.undo_len(), 1);
     }
 
     #[test]

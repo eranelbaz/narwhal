@@ -45,7 +45,7 @@ expression: "snapshot_core_sized(&mut core, 130, 66)"
 │            │  d / y / c + motion                   operator: dd yy cc, dw, d$, dG, dgg …                          │            │
 │            │  d / y / c (visual)                   delete / yank / change selection                               │            │
 │            │  y / d (mouse selection)              yank / delete the dragged selection                            │            │
-│            │  x / Del                              delete char under cursor                                       │            │
+│            │  x / Del · u                          delete char under cursor · undo                                │            │
 │            │  Alt-N / Alt-A                        multi-cursor: add next / all matches                           │            │
 │            │  Esc (multi-cursor)                   collapse to primary cursor                                     │            │
 │            │                                                                                                      │            │

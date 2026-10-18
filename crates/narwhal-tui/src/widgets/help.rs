@@ -185,8 +185,8 @@ pub const CHEATSHEET: &[CheatsheetSection] = &[
                 description: "yank / delete the dragged selection",
             },
             CheatsheetEntry {
-                keys: "x / Del",
-                description: "delete char under cursor",
+                keys: "x / Del · u",
+                description: "delete char under cursor · undo",
             },
             CheatsheetEntry {
                 keys: "Alt-N / Alt-A",

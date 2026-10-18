@@ -33,6 +33,13 @@ pub(crate) fn right_after_quote(buffer: &str, cursor_offset: usize, prefix: &str
         .is_some_and(|before| before.ends_with('\''))
 }
 
+fn commit_insert_undo(tab: &mut crate::core::state::tab::Tab) {
+    if let Some((before, mark)) = tab.insert_undo.take() {
+        tab.editor.history_mut().discard_since(mark);
+        tab.editor.commit_undo_snapshot(before);
+    }
+}
+
 /// Convert a `narwhal_vim::Motion` to `narwhal_domain::Motion`.
 ///
 /// The two enums are isomorphic but live in separate crates to avoid
@@ -474,6 +481,15 @@ impl AppCore {
 
     /// Open the editor search prompt (`/` for forward, `?` for backward).
     pub(crate) async fn apply_action(&mut self, action: Action) {
+        if matches!(
+            action,
+            Action::Operate {
+                op: Operator::Change,
+                ..
+            }
+        ) {
+            self.begin_insert_undo();
+        }
         match action {
             Action::Move { motion, count } => {
                 self.ui.tabs[self.ui.active_tab]
@@ -513,7 +529,22 @@ impl AppCore {
                 }
                 buf.commit_undo_snapshot(before);
             }
+            Action::Undo { count } => {
+                self.commit_insert_undo();
+                let buf = &mut self.ui.tabs[self.ui.active_tab].editor;
+                let undone = (0..count).take_while(|_| buf.undo()).count();
+                self.ui.status.message = match undone {
+                    0 => "nothing to undo".into(),
+                    1 => "undo".into(),
+                    n => format!("undo ×{n}"),
+                };
+            }
             Action::EnterMode(mode) => {
+                if mode == Mode::Insert {
+                    self.begin_insert_undo();
+                } else {
+                    self.commit_insert_undo();
+                }
                 let buf = &self.ui.tabs[self.ui.active_tab].editor;
                 if matches!(mode, Mode::Visual | Mode::VisualLine) {
                     self.ui.tabs[self.ui.active_tab].visual_anchor =
@@ -579,7 +610,20 @@ impl AppCore {
             if tab.visual_anchor.take().is_some() {
                 tab.editor.clear_selection();
             }
+            commit_insert_undo(tab);
         }
+    }
+
+    fn begin_insert_undo(&mut self) {
+        let tab = &mut self.ui.tabs[self.ui.active_tab];
+        if tab.insert_undo.is_none() {
+            let mark = tab.editor.history().mark();
+            tab.insert_undo = Some((tab.editor.snapshot(), mark));
+        }
+    }
+
+    fn commit_insert_undo(&mut self) {
+        commit_insert_undo(&mut self.ui.tabs[self.ui.active_tab]);
     }
 
     /// Rebuild the editor selection from the visual anchor to the
@@ -691,7 +735,9 @@ impl AppCore {
         if !yanked.is_empty() {
             let _ = self.deps.clipboard.set_text(&yanked);
         }
+        let before = buf.snapshot();
         buf.apply_operator_delete(dm, count);
+        buf.commit_undo_snapshot(before);
 
         if op == Operator::Delete {
             let lines = yanked.lines().count();

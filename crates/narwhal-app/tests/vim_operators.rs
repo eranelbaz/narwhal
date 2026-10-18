@@ -189,3 +189,40 @@ async fn count_g_jumps_to_line() {
     core.handle_key(key(KeyCode::Char('G'))).await;
     assert_eq!(core.editor().cursor_row(), 1);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn u_undoes_operators_and_insert_sessions() {
+    let (mut core, _clip) = core_with_clipboard();
+    type_text(&mut core, "foo bar").await;
+    type_text(&mut core, "X").await;
+    core.handle_key(key(KeyCode::Char('0'))).await;
+    core.handle_key(key(KeyCode::Char('d'))).await;
+    core.handle_key(key(KeyCode::Char('w'))).await;
+    core.handle_key(key(KeyCode::Char('x'))).await;
+    assert_eq!(core.editor().lines(), &["arX"]);
+
+    core.handle_key(key(KeyCode::Char('u'))).await;
+    assert_eq!(core.editor().lines(), &["barX"]);
+    core.handle_key(key(KeyCode::Char('u'))).await;
+    assert_eq!(core.editor().lines(), &["foo barX"]);
+    core.handle_key(key(KeyCode::Char('u'))).await;
+    assert_eq!(core.editor().lines(), &["foo bar"]);
+    core.handle_key(key(KeyCode::Char('u'))).await;
+    assert_eq!(core.editor().lines(), &[""]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn u_undoes_change_and_typed_replacement_together() {
+    let (mut core, _clip) = core_with_clipboard();
+    type_text(&mut core, "foo bar").await;
+    core.handle_key(key(KeyCode::Char('0'))).await;
+    core.handle_key(key(KeyCode::Char('c'))).await;
+    core.handle_key(key(KeyCode::Char('w'))).await;
+    for ch in "baz ".chars() {
+        core.handle_key(key(KeyCode::Char(ch))).await;
+    }
+    core.handle_key(key(KeyCode::Esc)).await;
+    assert_eq!(core.editor().lines(), &["baz bar"]);
+    core.handle_key(key(KeyCode::Char('u'))).await;
+    assert_eq!(core.editor().lines(), &["foo bar"]);
+}

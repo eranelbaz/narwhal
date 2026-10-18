@@ -17,8 +17,8 @@ mid-edit does not lose your text.
 
 Standard subset: `hjkl`, `w` / `b`, `0` / `$` / `gg` / `G`,
 `Ctrl-D` / `Ctrl-U`, `i` / `a`, `dd` / `yy` / `dw` / `cc`, `v` / `V`,
-`/` and `?` search with `n` / `N`, `:` command mode. No undo/redo or
-`o` yet. With a mouse selection active in normal mode, `y` / `d`
+`/` and `?` search with `n` / `N`, `:` command mode, `u` undo (an
+insert session undoes as one step). No redo or `o` yet. With a mouse selection active in normal mode, `y` / `d`
 act on the selection.
 
 Visual mode accepts count prefixes (`3j`). Operators chain with
